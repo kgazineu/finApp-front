@@ -35,7 +35,8 @@ export type BillingEntry = {
 
 export type BillingRegistration = {
   id: number;
-  delta: number;
+  /** null no primeiro registro: não há registro anterior para comparar */
+  delta: number | null;
   total: number;
   entries: BillingEntry[];
   createdAt: string;
@@ -94,12 +95,16 @@ export type TransactionInstallment = Installment & {
 
 export type ReceivableKind = 'split' | 'loan';
 
+/** total: o valor é dividido entre as parcelas · installment: o valor é o de cada parcela */
+export type ReceivableAmountMode = 'total' | 'installment';
+
 export type Receivable = {
   id: number;
   kind: ReceivableKind;
   debtor: string;
   description: string;
   amount: number;
+  amountMode: ReceivableAmountMode;
   interestRate: number;
   installments: Installment[];
   createdAt: string;
@@ -110,9 +115,18 @@ export type ReceivableCreateInput = {
   debtor: string;
   description: string;
   amount: number;
+  amountMode: ReceivableAmountMode;
   interestRate: number;
   installments: number;
   firstDueDate: string;
+};
+
+/** applyToFollowing leva valor e vencimento às próximas parcelas ainda não recebidas */
+export type InstallmentUpdateInput = {
+  paid?: boolean;
+  amount?: number;
+  dueDate?: string;
+  applyToFollowing?: boolean;
 };
 
 export type ReceivableInstallment = Installment & {

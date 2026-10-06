@@ -1,13 +1,16 @@
 // Estado dos formulários (sempre texto, igual em web e mobile) e conversão para o corpo da API.
 // As funções *Payload validam e lançam Error com a mensagem para o usuário.
 
-import { centsToInput, digits, endOfThisMonth, formatMonth, parseDate, parseMoney, parseMonth, thisMonth } from './format';
+import { centsToInput, digits, endOfThisMonth, formatDate, formatMonth, parseDate, parseMoney, parseMonth, thisMonth } from './format';
 import type {
   Account,
   AccountInput,
   AccountKind,
   BillingEntryInput,
   BillingRegistration,
+  Installment,
+  InstallmentUpdateInput,
+  ReceivableAmountMode,
   ReceivableCreateInput,
   ReceivableKind,
   RecurringCreateInput,
@@ -110,6 +113,7 @@ export type ReceivableForm = {
   kind: ReceivableKind;
   debtor: string;
   description: string;
+  amountMode: ReceivableAmountMode;
   amount: string;
   interestRate: string;
   installments: string;
@@ -120,6 +124,7 @@ export const emptyReceivableForm = (): ReceivableForm => ({
   kind: 'loan',
   debtor: '',
   description: '',
+  amountMode: 'total',
   amount: '',
   interestRate: '',
   installments: '',
@@ -128,18 +133,35 @@ export const emptyReceivableForm = (): ReceivableForm => ({
 
 export function receivablePayload(f: ReceivableForm): ReceivableCreateInput {
   const split = f.kind === 'split'; // conta dividida: sem juros, uma parcela
+  const perInstallment = !split && f.amountMode === 'installment'; // valor fixo por parcela: sem juros
   return {
     kind: f.kind,
     debtor: required(f.debtor, 'quem deve'),
     description: required(f.description, 'a descrição'),
-    amount: positiveMoney(f.amount),
-    interestRate: split ? 0 : (optionalInt(f.interestRate, 'Os juros', 0, 1000) ?? 0),
+    amount: positiveMoney(f.amount, perInstallment ? 'o valor de cada parcela' : 'o valor'),
+    amountMode: perInstallment ? 'installment' : 'total',
+    interestRate: split || perInstallment ? 0 : (optionalInt(f.interestRate, 'Os juros', 0, 1000) ?? 0),
     installments: split ? 1 : (optionalInt(f.installments, 'As parcelas', 1, 120) ?? 1),
     firstDueDate: parseDate(f.firstDueDate) ?? fail('Vencimento deve ser uma data válida no formato DD/MM/AAAA'),
   };
 }
 
 export type ReceivableEditForm = { debtor: string; description: string };
+
+/** edição de uma parcela; applyToFollowing leva valor e dia às próximas ainda não recebidas */
+export type InstallmentEditForm = { amount: string; dueDate: string; applyToFollowing: boolean };
+
+export const installmentToEditForm = (i: Installment): InstallmentEditForm => ({
+  amount: centsToInput(i.amount),
+  dueDate: formatDate(i.dueDate),
+  applyToFollowing: false,
+});
+
+export const installmentEditPayload = (f: InstallmentEditForm): InstallmentUpdateInput => ({
+  amount: positiveMoney(f.amount),
+  dueDate: parseDate(f.dueDate) ?? fail('Vencimento deve ser uma data válida no formato DD/MM/AAAA'),
+  applyToFollowing: f.applyToFollowing,
+});
 
 export const receivableEditPayload = (f: ReceivableEditForm) => ({
   debtor: required(f.debtor, 'quem deve'),

@@ -1,5 +1,6 @@
 import {
   billingFormFrom,
+  deltaText,
   cx,
   formatDate,
   formatDateTime,
@@ -136,7 +137,7 @@ export default function Projection() {
               </View>
               <View className="items-end">
                 <Text className={ui.strong}>{money(r.total)}</Text>
-                <Text className={cx('text-sm font-semibold', ui.amount(r.delta))}>{signedMoney(r.delta)}</Text>
+                <Text className={cx('text-sm font-semibold', ui.amount(r.delta ?? 0))}>{deltaText(r.delta)}</Text>
               </View>
             </Row>
           ))

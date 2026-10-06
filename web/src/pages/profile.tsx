@@ -1,6 +1,6 @@
-import { PASSWORD_HINT, digits, formatDateTime, passwordsMatch, ui, useAction, useAuth } from '@finapp/shared';
-import { useState, type FormEvent } from 'react';
-import { Button, Card, Field, FormError, Modal, NoticeBar } from '../components';
+import { PASSWORD_HINT, digits, formatDateTime, passwordsMatch, ui, useAction, useAuth, useNotice } from '@finapp/shared';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Button, Card, Field, FormError, Modal, NoticeBar, confirmAction } from '../components';
 import { PageHeader } from '../layouts';
 
 export function ProfilePage() {
@@ -28,6 +28,35 @@ export function ProfilePage() {
     await api.passwordReset.confirm(user!.email, code, password);
     await signOut(); // a troca encerra todas as sessões
   });
+
+  // backup: baixa um JSON com todos os dados; importar só funciona numa conta vazia
+  const dataNotice = useNotice();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const exportData = useAction(async () => {
+    const file = await api.data.export();
+    const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `finapp-dados-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    dataNotice.ok('Arquivo baixado. Guarde-o: ele tem todos os seus dados do FinApp.');
+  });
+  const importData = useAction(async (file: File) => {
+    let content: unknown;
+    try {
+      content = JSON.parse(await file.text());
+    } catch {
+      throw new Error('Arquivo inválido: escolha o .json gerado por "Exportar dados"');
+    }
+    if (!(await confirmAction('Importar os dados deste arquivo para esta conta? Só funciona numa conta que ainda não tem dados.'))) return;
+    dataNotice.ok((await api.data.import(content)).message);
+  });
+  const onFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite escolher o mesmo arquivo de novo
+    if (file) void importData.run(file);
+  };
 
   if (!user) return null;
   const initials = user.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
@@ -64,6 +93,24 @@ export function ProfilePage() {
             </Button>
           </div>
         </form>
+      </Card>
+
+      <Card title="Seus dados">
+        <p className={ui.muted}>
+          Baixe um arquivo com tudo o que você cadastrou: contas, registros de saldo, transações, valores a receber, lançamentos e
+          metas, com o histórico de pagamentos. Para levar para outro servidor, crie uma conta nova lá e use "Importar dados".
+        </p>
+        <NoticeBar notice={dataNotice.notice} onClose={dataNotice.clear} />
+        <FormError error={exportData.error ?? importData.error} />
+        <div className="flex flex-wrap gap-2">
+          <Button busy={exportData.busy} onClick={() => (importData.clearError(), exportData.run())}>
+            Exportar dados
+          </Button>
+          <Button variant="secondary" busy={importData.busy} onClick={() => (exportData.clearError(), fileInput.current?.click())}>
+            Importar dados
+          </Button>
+          <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={onFile} />
+        </div>
       </Card>
 
       <Card title="Segurança">
