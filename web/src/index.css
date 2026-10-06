@@ -1,0 +1,7 @@
+@import 'tailwindcss';
+/* as classes dos tokens compartilhados (ui.ts) também precisam ser geradas */
+@source '../../front-shared/src';
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}

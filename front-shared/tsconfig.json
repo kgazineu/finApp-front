@@ -1,0 +1,21 @@
+{
+  // só para o editor: a checagem de tipos de verdade roda dentro de web/ e mobile/ (npm run typecheck).
+  // Sem node_modules aqui, os tipos do React vêm do web.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2022", "DOM"],
+    "paths": {
+      "react": ["../web/node_modules/@types/react"],
+      "react/*": ["../web/node_modules/@types/react/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["src/*.test.ts"]
+}
