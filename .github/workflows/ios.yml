@@ -1,0 +1,104 @@
+name: iOS
+
+# IPA sem assinatura, para instalar pelo SideStore/AltStore, que assinam com o Apple ID (grátis)
+# direto no celular. Só manual: Actions → iOS → Run workflow. Não depende de conta paga da Apple.
+# Repositório público: o runner macOS não consome minutos do plano.
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'URL https da API (vazio: usa a variável EXPO_PUBLIC_API_URL do repositório)'
+        required: false
+        type: string
+
+concurrency:
+  group: finapp-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    name: IPA sem assinatura
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    env:
+      # EXPO_PUBLIC_* é gravado dentro do app na compilação: só a URL pública da API, nunca segredos.
+      # Fixe em Settings → Secrets and variables → Actions → Variables, ou passe só nesta execução (api_url).
+      EXPO_PUBLIC_API_URL: ${{ inputs.api_url || vars.EXPO_PUBLIC_API_URL }}
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v7
+
+      # o iOS bloqueia http fora da rede local (NSAllowsArbitraryLoads desligado no Info.plist)
+      - name: Conferir URL da API
+        run: |
+          case "$EXPO_PUBLIC_API_URL" in
+            https://*) echo "API: $EXPO_PUBLIC_API_URL" ;;
+            *)
+              echo "::error::Informe a URL https da API (campo api_url ou variável EXPO_PUBLIC_API_URL do repositório)"
+              exit 1
+              ;;
+          esac
+
+      - name: Configurar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: mobile
+        run: npm ci
+
+      - name: Checar tipos
+        working-directory: mobile
+        run: npm run typecheck
+
+      # mobile/ios não é versionado: é gerado a partir do app.json (e roda o pod install)
+      - name: Gerar projeto iOS
+        working-directory: mobile
+        run: npx expo prebuild --platform ios
+
+      # o bundle JS é gerado e embutido pelo Xcode nesta etapa (Release usa Hermes)
+      - name: Compilar sem assinatura
+        working-directory: mobile/ios
+        run: |
+          set -o pipefail
+          WORKSPACE="$(ls -d *.xcworkspace | head -n 1)"
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          echo "workspace=$WORKSPACE scheme=$SCHEME"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Empacotar IPA
+        working-directory: mobile/ios
+        run: |
+          APP="$(ls -d build/Build/Products/Release-iphoneos/*.app | head -n 1)"
+          NAME="$(basename "$APP" .app)"
+          [ -f "$APP/main.jsbundle" ] || echo "::warning::main.jsbundle não está no .app: o app pode abrir em branco"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry "$NAME.ipa" Payload
+          ls -lh "$NAME.ipa"
+
+      - name: Guardar IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: finapp-ios-${{ github.sha }}
+          path: mobile/ios/*.ipa
+          if-no-files-found: error
+          retention-days: 14
