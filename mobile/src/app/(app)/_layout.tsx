@@ -5,7 +5,7 @@ type Icon = keyof typeof Ionicons.glyphMap;
 
 // mesmas seções da navegação da web (web/src/layouts.tsx)
 const tabs: { name: string; title: string; icon: Icon }[] = [
-  { name: 'index', title: 'Projeção', icon: 'trending-up' },
+  { name: 'index', title: 'Início', icon: 'trending-up' },
   { name: 'transacoes', title: 'Transações', icon: 'swap-vertical' },
   { name: 'a-receber', title: 'A receber', icon: 'cash-outline' },
   { name: 'contas', title: 'Contas', icon: 'wallet-outline' },

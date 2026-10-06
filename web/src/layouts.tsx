@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router';
 
 export const links = [
-  { to: '/', label: 'Projeção' },
+  { to: '/', label: 'Início' },
   { to: '/transacoes', label: 'Transações' },
   { to: '/a-receber', label: 'A receber' },
   { to: '/contas', label: 'Contas' },

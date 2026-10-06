@@ -37,9 +37,10 @@ const statusMessages: Record<number, string> = {
 
 /**
  * Cliente tipado da API. `getToken` é lido a cada chamada; `onUnauthorized`
- * roda quando uma chamada autenticada recebe 401 (token expirado ou revogado).
+ * roda quando uma chamada autenticada recebe 401 (token expirado ou revogado);
+ * `onWrite` roda depois de toda chamada que não é GET (os dados podem ter mudado).
  */
-export function createApi(baseUrl: string, getToken: () => string | null, onUnauthorized: () => void) {
+export function createApi(baseUrl: string, getToken: () => string | null, onUnauthorized: () => void, onWrite: () => void = () => {}) {
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const token = getToken();
     const headers: Record<string, string> = {};
@@ -55,6 +56,9 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
       });
     } catch {
       throw new ApiError('Não foi possível conectar ao servidor. Verifique sua conexão.', 0);
+    } finally {
+      // mesmo com erro: a escrita pode ter chegado ao servidor
+      if (method !== 'GET') onWrite();
     }
 
     const text = await res.text();
@@ -96,7 +100,8 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     /** backup de todos os dados do usuário; o arquivo é opaco para o front */
     data: {
       export: () => get<unknown>('/export'),
-      import: (file: unknown) => post<Message>('/import', file),
+      /** conta com dados responde 409; `replace` apaga tudo o que existe e grava o arquivo no lugar */
+      import: (file: unknown, replace = false) => post<Message>(replace ? '/import?replace=true' : '/import', file),
     },
 
     accounts: {

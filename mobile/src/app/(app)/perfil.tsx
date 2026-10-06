@@ -89,7 +89,7 @@ export default function Profile() {
       <Card title="Seus dados">
         <Text className={ui.muted}>
           Gere um arquivo com tudo o que você cadastrou: contas, registros de saldo, transações, valores a receber, lançamentos e metas.
-          Para levar para outro servidor, crie uma conta nova lá e importe pelo site (Perfil → Importar dados).
+          Para importar um arquivo desses (outro servidor ou backup), use o site: Perfil → Importar dados.
         </Text>
         <NoticeBar notice={dataNotice.notice} onClose={dataNotice.clear} />
         <FormError error={exportData.error} />

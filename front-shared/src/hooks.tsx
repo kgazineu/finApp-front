@@ -21,7 +21,21 @@ import {
 } from './forms';
 import { money, signedMoney } from './format';
 import { signedAmount } from './labels';
-import type { Account, Installment, Projection, Receivable, RecurringTransaction, User } from './types';
+import type { Account, BillingRegistration, Installment, Projection, Receivable, RecurringTransaction, User } from './types';
+
+// ---------- cache ----------
+
+// Respostas já carregadas, por tela: ao voltar para uma tela os dados aparecem na hora e são
+// atualizados por trás. Qualquer escrita na API e a saída da conta apagam tudo.
+// ponytail: só em memória; persistir (AsyncStorage/localStorage) se abrir o app do zero ficar lento
+const cache = new Map<string, unknown>();
+// sobe a cada escrita: resposta pedida antes dela pode estar velha e é descartada
+let generation = 0;
+
+export function clearCache() {
+  generation++;
+  cache.clear();
+}
 
 // ---------- autenticação ----------
 
@@ -51,11 +65,12 @@ export function AuthProvider({ baseUrl, storage, children }: { baseUrl: string; 
 
   const signOut = useCallback(async () => {
     token.current = null;
+    clearCache(); // os dados da conta não podem aparecer para quem entrar depois
     setState({ status: 'signedOut' });
     await storage.remove().catch(() => {}); // falhar ao limpar não pode impedir a saída
   }, [storage]);
 
-  const api = useMemo(() => createApi(baseUrl, () => token.current, () => void signOut()), [baseUrl, signOut]);
+  const api = useMemo(() => createApi(baseUrl, () => token.current, () => void signOut(), clearCache), [baseUrl, signOut]);
 
   const startSession = useCallback(
     async (value: string) => {
@@ -115,30 +130,49 @@ export const useApi = () => useAuth().api;
 
 // ---------- utilitários ----------
 
-/** carrega dados e expõe recarga; `deps` como num useEffect */
-export function useQuery<T>(load: () => Promise<T>, deps: unknown[] = []) {
-  const [data, setData] = useState<T | null>(null);
+/**
+ * Carrega dados e expõe recarga. `key` identifica a resposta no cache (mude a chave quando os
+ * parâmetros mudarem): com ela guardada, a tela abre na hora e atualiza em silêncio; sem ela,
+ * mostra carregando.
+ */
+export function useQuery<T>(key: string, load: () => Promise<T>) {
+  const [data, setData] = useState<T | null>(() => (cache.get(key) as T | undefined) ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cache.has(key));
   const loadRef = useRef(load);
   loadRef.current = load;
+  const keyRef = useRef(key);
+  keyRef.current = key;
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try {
-      setData(await loadRef.current());
-      setError(null);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const refresh = useCallback(
+    async (silent: boolean) => {
+      const started = generation;
+      if (!silent) setLoading(true);
+      try {
+        const value = await loadRef.current();
+        if (started !== generation) return; // houve escrita no meio: o reload pedido depois dela traz o certo
+        cache.set(key, value);
+        // troca rápida de chave (ex.: meses): resposta de uma chave antiga não aparece na atual
+        if (keyRef.current === key) {
+          setData(value);
+          setError(null);
+        }
+      } catch (err) {
+        if (keyRef.current === key) setError(errorMessage(err));
+      } finally {
+        if (keyRef.current === key) setLoading(false);
+      }
+    },
+    [key],
+  );
 
   useEffect(() => {
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+    const cached = cache.get(key) as T | undefined;
+    if (cached !== undefined) setData(cached);
+    void refresh(cached !== undefined);
+  }, [key, refresh]);
+
+  const reload = useCallback(() => refresh(false), [refresh]);
 
   return { data, error, loading, reload };
 }
@@ -189,13 +223,13 @@ export type PaidItem = {
   toggle(paid: boolean): Promise<unknown>;
 };
 
-/** tela principal: projeção, registros de saldo (com delta), pendências e marcadas nos últimos 30 dias */
+/** tela principal: saldo atual, projeção, registros de saldo (com delta), pendências e marcadas nos últimos 30 dias */
 export function useProjection() {
   const api = useApi();
   const notice = useNotice();
   const [months, setMonths] = useState(1);
 
-  const query = useQuery(async () => {
+  const query = useQuery(`projection:${months}`, async () => {
     const [projection, paidTransactions, paidReceivables] = await Promise.all([
       api.billings.projection(months),
       api.recurring.paid(),
@@ -222,16 +256,20 @@ export function useProjection() {
     ].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
 
     return { projection, paid };
-  }, [months]);
+  });
 
   const projection: Projection | null = query.data?.projection ?? null;
   const registrations = projection ? [...projection.billingRegistrations].reverse() : [];
   const last = projection?.billingRegistrations.at(-1) ?? null;
 
+  const incomes = sum(projection?.pendingTransactions.filter((i) => i.kind === 'income') ?? []);
+  const expenses = sum(projection?.pendingTransactions.filter((i) => i.kind === 'expense') ?? []);
   const breakdown = projection && {
     lastTotal: last?.total ?? 0,
-    incomes: sum(projection.pendingTransactions.filter((i) => i.kind === 'income')),
-    expenses: sum(projection.pendingTransactions.filter((i) => i.kind === 'expense')),
+    incomes,
+    expenses,
+    /** soma do que está na lista de transações pendentes: entradas − despesas, atrasadas incluídas */
+    transactions: incomes - expenses,
     receivables: sum(projection.pendingReceivables),
   };
 
@@ -253,6 +291,7 @@ export function useProjection() {
     projection,
     registrations,
     last,
+    balance: last ? balanceOf(last) : null,
     breakdown,
     paid: query.data?.paid ?? [],
     payTransaction: (id: number, paid: boolean) => setPaid((p) => api.recurring.setPaid(id, p), paid),
@@ -271,10 +310,17 @@ export function useProjection() {
 
 const sum = (items: { amount: number }[]) => items.reduce((total, i) => total + i.amount, 0);
 
+/** saldo atual = último registro de saldos, separado em contas e faturas (o delta é null no primeiro) */
+function balanceOf(reg: BillingRegistration) {
+  const accounts = reg.entries.filter((e) => e.accountKind === 'asset');
+  const bills = reg.entries.filter((e) => e.accountKind === 'liability');
+  return { total: reg.total, delta: reg.delta, createdAt: reg.createdAt, accounts, bills, accountsTotal: sum(accounts), billsTotal: sum(bills) };
+}
+
 export function useAccounts() {
   const api = useApi();
   const notice = useNotice();
-  const query = useQuery(() => api.accounts.list());
+  const query = useQuery('accounts', () => api.accounts.list());
 
   return {
     ...query,
@@ -304,7 +350,7 @@ export function useAccounts() {
 export function useRecurring() {
   const api = useApi();
   const notice = useNotice();
-  const query = useQuery(() => api.recurring.list());
+  const query = useQuery('recurring', () => api.recurring.list());
 
   return {
     ...query,
@@ -338,7 +384,7 @@ export function useRecurring() {
 export function useReceivables() {
   const api = useApi();
   const notice = useNotice();
-  const query = useQuery(() => api.receivables.list());
+  const query = useQuery('receivables', () => api.receivables.list());
 
   return {
     ...query,

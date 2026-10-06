@@ -13,6 +13,7 @@ import {
   useAction,
   useProjection,
   type Account,
+  type BillingEntry,
   type BillingForm,
 } from '@finapp/shared';
 import { Link } from 'expo-router';
@@ -42,7 +43,7 @@ export default function Projection() {
   return (
     <Screen onRefresh={p.reload} refreshing={p.loading && !!p.data}>
       <PageHeader
-        description="Quanto você vai ter, contando o último saldo registrado e tudo que ainda vai entrar e sair."
+        description="Quanto você tem agora, pelo último registro de saldos, e quanto vai ter contando tudo que ainda vai entrar e sair."
         action={
           <Button busy={open.busy} onPress={() => open.run()}>
             + Novo registro de saldos
@@ -52,6 +53,26 @@ export default function Projection() {
       <NoticeBar notice={p.notice ?? (open.error ? { text: open.error, error: true } : null)} onClose={() => (p.clear(), open.clearError())} />
       {p.error && <NoticeBar notice={{ text: p.error, error: true }} onClose={() => p.reload()} />}
 
+      <Card title="Saldo atual">
+        {p.balance ? (
+          <View className="gap-4">
+            <View>
+              <Text className={ui.muted}>No registro de {formatDateTime(p.balance.createdAt)} você tinha</Text>
+              <Text className={p.balance.total < 0 ? ui.bigNegative : ui.big}>{money(p.balance.total)}</Text>
+              {p.balance.delta !== null && (
+                <Text className={cx('text-sm font-semibold', ui.amount(p.balance.delta))}>{signedMoney(p.balance.delta)} desde o registro anterior</Text>
+              )}
+            </View>
+            <Entries title="Contas" entries={p.balance.accounts} total={p.balance.accountsTotal} empty="Nenhuma conta com saldo." />
+            <Entries title="Faturas" entries={p.balance.bills} total={-p.balance.billsTotal} empty="Nenhuma fatura." bill />
+          </View>
+        ) : p.projection ? (
+          <Empty>Nenhum registro ainda. Use "+ Novo registro de saldos" para anotar quanto tem em cada conta e em cada fatura.</Empty>
+        ) : (
+          <Loading />
+        )}
+      </Card>
+
       <Card>
         <Segmented label="Projetar para" value={p.months} options={monthOptions} onChange={p.setMonths} />
         {p.projection && p.breakdown ? (
@@ -59,6 +80,7 @@ export default function Projection() {
             <View>
               <Text className={ui.muted}>Em {formatDate(p.projection.projectedFor)} você terá</Text>
               <Text className={p.projection.projectedAmount < 0 ? ui.bigNegative : ui.big}>{money(p.projection.projectedAmount)}</Text>
+              <Text className={ui.small}>Conta como pago nesse dia 1 tudo que vence até o fim do mês, atrasados incluídos.</Text>
             </View>
             <View className="flex-row flex-wrap gap-y-2">
               <Breakdown label="Último registro" cents={p.breakdown.lastTotal} />
@@ -72,8 +94,8 @@ export default function Projection() {
         )}
       </Card>
 
-      <Card title="Transações pendentes">
-        <Text className={ui.small}>Em vermelho: atrasadas. Marque quando pagar ou receber.</Text>
+      <Card title="Transações pendentes" action={p.breakdown && <Total cents={p.breakdown.transactions} />}>
+        <Text className={ui.small}>Em vermelho: atrasadas. Marque quando pagar ou receber. O total soma tudo da lista, atrasadas incluídas.</Text>
         {p.projection?.pendingTransactions.length ? (
           p.projection.pendingTransactions.map((i) => (
             <Row key={i.id}>
@@ -99,7 +121,7 @@ export default function Projection() {
         )}
       </Card>
 
-      <Card title="A receber pendentes">
+      <Card title="A receber pendentes" action={p.breakdown && <Total cents={p.breakdown.receivables} />}>
         {p.projection?.pendingReceivables.length ? (
           p.projection.pendingReceivables.map((i) => (
             <Row key={i.id}>
@@ -203,6 +225,34 @@ export default function Projection() {
       </Modal>
     </Screen>
   );
+}
+
+function Entries({ title, entries, total, empty, bill }: { title: string; entries: BillingEntry[]; total: number; empty: string; bill?: boolean }) {
+  return (
+    <View className="gap-1">
+      <Text className={ui.label}>{title}</Text>
+      {entries.length ? (
+        <>
+          {entries.map((e) => (
+            <View key={e.id} className="flex-row justify-between gap-3">
+              <Text className={cx(ui.text, 'flex-1')}>{e.accountName}</Text>
+              <Text className={cx('text-sm font-semibold', ui.amount(bill ? -e.amount : e.amount))}>{money(bill ? -e.amount : e.amount)}</Text>
+            </View>
+          ))}
+          <View className="flex-row justify-between gap-3 border-t border-slate-100 pt-1">
+            <Text className={ui.strong}>Total</Text>
+            <Text className={cx('text-sm font-semibold', ui.amount(total))}>{money(total)}</Text>
+          </View>
+        </>
+      ) : (
+        <Text className={ui.small}>{empty}</Text>
+      )}
+    </View>
+  );
+}
+
+function Total({ cents }: { cents: number }) {
+  return <Text className={cx('font-semibold', ui.amount(cents))}>Total {signedMoney(cents)}</Text>;
 }
 
 function Breakdown({ label, cents }: { label: string; cents: number }) {

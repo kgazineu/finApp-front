@@ -105,7 +105,7 @@ export default function Transactions() {
               <Field className="flex-1" label="A cada quantos meses" placeholder="1" inputMode="numeric" value={creating.intervalMonths} mask={(v) => digits(v).slice(0, 3)} onChange={(intervalMonths) => setCreating({ ...creating, intervalMonths })} />
               <Field className="flex-1" label="Quantas vezes" inputMode="numeric" value={creating.installments} mask={(v) => digits(v).slice(0, 3)} onChange={(installments) => setCreating({ ...creating, installments })} />
             </View>
-            <Text className={ui.small}>"Quantas vezes" vazio: fixa repete sem fim, variável acontece uma vez só.</Text>
+            <Text className={ui.small}>"Quantas vezes" vazio: fixa repete sem fim, variável acontece uma vez só. Pode começar no passado: as parcelas já vencidas aparecem como atrasadas e você marca as que já pagou ou recebeu.</Text>
             <FormError error={create.error} />
             <Button busy={create.busy} onPress={() => create.run()}>
               Cadastrar

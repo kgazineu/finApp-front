@@ -1,4 +1,4 @@
-import { PASSWORD_HINT, digits, formatDateTime, passwordsMatch, ui, useAction, useAuth, useNotice } from '@finapp/shared';
+import { ApiError, PASSWORD_HINT, digits, formatDateTime, passwordsMatch, ui, useAction, useAuth, useNotice } from '@finapp/shared';
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Button, Card, Field, FormError, Modal, NoticeBar, confirmAction } from '../components';
 import { PageHeader } from '../layouts';
@@ -29,7 +29,7 @@ export function ProfilePage() {
     await signOut(); // a troca encerra todas as sessões
   });
 
-  // backup: baixa um JSON com todos os dados; importar só funciona numa conta vazia
+  // backup: baixa um JSON com todos os dados; importar numa conta com dados troca tudo (com confirmação)
   const dataNotice = useNotice();
   const fileInput = useRef<HTMLInputElement>(null);
   const exportData = useAction(async () => {
@@ -49,8 +49,17 @@ export function ProfilePage() {
     } catch {
       throw new Error('Arquivo inválido: escolha o .json gerado por "Exportar dados"');
     }
-    if (!(await confirmAction('Importar os dados deste arquivo para esta conta? Só funciona numa conta que ainda não tem dados.'))) return;
-    dataNotice.ok((await api.data.import(content)).message);
+    try {
+      dataNotice.ok((await api.data.import(content)).message); // conta vazia: importa direto
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 409)) throw err;
+      const replace = await confirmAction(
+        'Você já tem dados cadastrados. Importar este arquivo vai APAGAR tudo o que você tem hoje (contas, registros de saldo, ' +
+          'transações, valores a receber, lançamentos e metas) e colocar o conteúdo do arquivo no lugar. Não dá para desfazer: ' +
+          'se quiser guardar o que tem agora, cancele e use "Exportar dados" antes.\n\nSubstituir seus dados pelos do arquivo?',
+      );
+      if (replace) dataNotice.ok((await api.data.import(content, true)).message);
+    }
   });
   const onFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -98,7 +107,8 @@ export function ProfilePage() {
       <Card title="Seus dados">
         <p className={ui.muted}>
           Baixe um arquivo com tudo o que você cadastrou: contas, registros de saldo, transações, valores a receber, lançamentos e
-          metas, com o histórico de pagamentos. Para levar para outro servidor, crie uma conta nova lá e use "Importar dados".
+          metas, com o histórico de pagamentos. "Importar dados" grava o conteúdo de um arquivo desses nesta conta: se ela já tiver
+          dados, tudo o que existe é substituído pelo arquivo (você confirma antes).
         </p>
         <NoticeBar notice={dataNotice.notice} onClose={dataNotice.clear} />
         <FormError error={exportData.error ?? importData.error} />

@@ -30,6 +30,8 @@ export type BillingEntry = {
   id: number;
   accountId: number;
   accountName: string;
+  /** tipo atual da conta: separa o saldo das contas do valor das faturas */
+  accountKind: AccountKind;
   amount: number;
 };
 
