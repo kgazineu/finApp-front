@@ -1,0 +1,22 @@
+name: finapp-front
+
+services:
+  web:
+    image: ghcr.io/kgazineu/finapp-front:${APP_VERSION:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      # para onde o Nginx encaminha /api (a API do finapp-back publicada na porta 8080 da VM)
+      API_UPSTREAM: ${API_UPSTREAM:-http://host.docker.internal:8080}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - "${FINAPP_WEB_PORT:-3000}:80"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --quiet --spider http://127.0.0.1/healthz
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s

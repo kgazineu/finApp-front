@@ -1,0 +1,150 @@
+name: Web
+
+# só o front web: mudanças apenas em mobile/ não disparam build nem deploy
+on:
+  push:
+    paths:
+      - web/**
+      - front-shared/**
+      - compose.prod.yaml
+      - .dockerignore
+      - .github/workflows/web.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - web/**
+      - front-shared/**
+      - compose.prod.yaml
+      - .dockerignore
+      - .github/workflows/web.yml
+  workflow_dispatch:
+
+concurrency:
+  group: finapp-web-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v7
+
+      - name: Configurar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: web
+        run: npm ci
+
+      - name: Testes do código compartilhado
+        working-directory: front-shared
+        run: npm test
+
+      # tsc --noEmit + vite build
+      - name: Checar tipos e compilar
+        working-directory: web
+        run: npm run build
+
+  publish:
+    name: Publicar imagem
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs:
+      - test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v7
+
+      - name: Entrar no GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construir e publicar imagem
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: web/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/kgazineu/finapp-front:${{ github.sha }}
+            ghcr.io/kgazineu/finapp-front:latest
+
+  deploy:
+    name: Deploy no homelab
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs:
+      - publish
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      packages: read
+
+    env:
+      DEPLOY_DIR: /opt/finapp-front
+
+    steps:
+      - name: Baixar compose de produção
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: compose.prod.yaml
+          sparse-checkout-cone-mode: false
+
+      # Valida o compose novo contra o .env do servidor antes de trocar o container.
+      - name: Validar configuração
+        run: |
+          trap 'rm -f "$DEPLOY_DIR/compose.yaml.new"' EXIT
+          install -m 0644 compose.prod.yaml "$DEPLOY_DIR/compose.yaml.new"
+          docker compose --project-directory "$DEPLOY_DIR" \
+            -f "$DEPLOY_DIR/compose.yaml.new" config --quiet
+          mv "$DEPLOY_DIR/compose.yaml.new" "$DEPLOY_DIR/compose.yaml"
+
+      - name: Atualizar front
+        env:
+          # mesma imagem publicada por este commit, não a latest do momento
+          APP_VERSION: ${{ github.sha }}
+          # login só deste job (a imagem pode ser privada no GHCR); não mexe no ~/.docker do runner
+          DOCKER_CONFIG: ${{ runner.temp }}/docker
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          cd "$DEPLOY_DIR"
+          docker compose pull web
+          docker compose up -d --wait --wait-timeout 60 web
+          docker compose ps
+          port="$(docker compose port web 80 | sed 's/.*://')"
+          curl --fail --silent --show-error "http://127.0.0.1:$port/healthz"
+          # a API é outro deploy: fora do ar ela não derruba o front, só avisa
+          curl --fail --silent --show-error --output /dev/null "http://127.0.0.1:$port/api/health" \
+            || echo "::warning::o front subiu, mas /api/health não respondeu (API fora do ar ou API_UPSTREAM errado)"
+
+      - name: Diagnóstico
+        if: failure()
+        run: |
+          docker ps -a --filter label=com.docker.compose.project=finapp-front
+          docker logs --tail 50 finapp-front-web-1 || true

@@ -1,0 +1,7 @@
+.git
+.github
+.claude
+mobile
+**/node_modules
+**/dist
+**/.env
