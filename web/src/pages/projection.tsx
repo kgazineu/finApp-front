@@ -1,5 +1,6 @@
 import {
   billingFormFrom,
+  deltaText,
   cx,
   formatDate,
   formatDateTime,
@@ -136,7 +137,7 @@ export function ProjectionPage() {
               </div>
               <div className="flex flex-col items-end">
                 <p className={ui.strong}>{money(r.total)}</p>
-                <p className={cx('text-sm font-semibold', ui.amount(r.delta))}>{signedMoney(r.delta)}</p>
+                <p className={cx('text-sm font-semibold', ui.amount(r.delta ?? 0))}>{deltaText(r.delta)}</p>
               </div>
             </Row>
           ))

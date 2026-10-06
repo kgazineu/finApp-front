@@ -1,6 +1,8 @@
-import { PASSWORD_HINT, digits, formatDateTime, passwordsMatch, ui, useAction, useAuth } from '@finapp/shared';
+import { PASSWORD_HINT, digits, formatDateTime, passwordsMatch, ui, useAction, useAuth, useNotice } from '@finapp/shared';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import { Button, Card, Field, FormError, Modal, NoticeBar, Screen, confirmAction } from '@/components';
 
 export default function Profile() {
@@ -29,6 +31,32 @@ export default function Profile() {
     await signOut(); // a troca encerra todas as sessões
   });
 
+  // backup: gera o JSON com todos os dados e abre o compartilhar (salvar em Arquivos, Drive, e-mail...)
+  const dataNotice = useNotice();
+  const exportData = useAction(async () => {
+    const content = JSON.stringify(await api.data.export(), null, 2);
+    const name = `finapp-dados-${new Date().toISOString().slice(0, 10)}.json`;
+
+    if (Platform.OS === 'web') {
+      // prévia no navegador (expo start --web): não há compartilhar de arquivo, então baixa
+      const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      link.click();
+      URL.revokeObjectURL(url);
+      dataNotice.ok('Arquivo baixado. Guarde-o: ele tem todos os seus dados do FinApp.');
+      return;
+    }
+
+    if (!(await Sharing.isAvailableAsync())) throw new Error('Este aparelho não permite compartilhar arquivos');
+    const file = new File(Paths.cache, name);
+    file.create({ overwrite: true });
+    file.write(content);
+    await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json', dialogTitle: 'Exportar dados do FinApp' });
+    dataNotice.ok('Arquivo gerado. Guarde-o (Arquivos, Drive, e-mail): ele tem todos os seus dados do FinApp.');
+  });
+
   if (!user) return null;
   const initials = user.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
@@ -55,6 +83,18 @@ export default function Profile() {
         <FormError error={save.error} />
         <Button busy={save.busy} onPress={() => save.run()}>
           Salvar alterações
+        </Button>
+      </Card>
+
+      <Card title="Seus dados">
+        <Text className={ui.muted}>
+          Gere um arquivo com tudo o que você cadastrou: contas, registros de saldo, transações, valores a receber, lançamentos e metas.
+          Para levar para outro servidor, crie uma conta nova lá e importe pelo site (Perfil → Importar dados).
+        </Text>
+        <NoticeBar notice={dataNotice.notice} onClose={dataNotice.clear} />
+        <FormError error={exportData.error} />
+        <Button busy={exportData.busy} onPress={() => exportData.run()}>
+          Exportar dados
         </Button>
       </Card>
 

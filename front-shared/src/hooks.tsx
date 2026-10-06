@@ -10,16 +10,18 @@ import {
   receivablePayload,
   recurringPayload,
   recurringUpdatePayload,
+  installmentEditPayload,
   type AccountForm,
   type BillingForm,
+  type InstallmentEditForm,
   type ReceivableEditForm,
   type ReceivableForm,
   type RecurringEditForm,
   type RecurringForm,
 } from './forms';
-import { money } from './format';
+import { money, signedMoney } from './format';
 import { signedAmount } from './labels';
-import type { Account, Projection, Receivable, RecurringTransaction, User } from './types';
+import type { Account, Installment, Projection, Receivable, RecurringTransaction, User } from './types';
 
 // ---------- autenticação ----------
 
@@ -260,7 +262,8 @@ export function useProjection() {
     loadAccounts: () => api.accounts.list(),
     async createBilling(accounts: Account[], form: BillingForm) {
       const reg = await api.billings.create(billingPayload(accounts, form));
-      notice.ok(`Registro #${reg.id} criado: total ${money(reg.total)}, delta ${money(reg.delta)}.`);
+      const delta = reg.delta === null ? ' (primeiro registro, ainda sem delta)' : `, delta ${signedMoney(reg.delta)}`;
+      notice.ok(`Registro #${reg.id} criado: total ${money(reg.total)}${delta}.`);
       await query.reload();
     },
   };
@@ -370,6 +373,16 @@ export function useReceivables() {
       } catch (err) {
         notice.fail(err);
       }
+    },
+    async updateInstallment(installment: Installment, form: InstallmentEditForm) {
+      const body = installmentEditPayload(form);
+      await api.receivables.updateInstallment(installment.id, body);
+      notice.ok(
+        body.applyToFollowing
+          ? `Parcela ${installment.number} e as próximas em aberto atualizadas.`
+          : `Parcela ${installment.number} atualizada.`,
+      );
+      await query.reload();
     },
   };
 }

@@ -5,6 +5,7 @@ import type {
   BillingRegistration,
   Message,
   Projection,
+  InstallmentUpdateInput,
   Receivable,
   ReceivableCreateInput,
   ReceivableInstallment,
@@ -92,6 +93,12 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
         post<Message>('/password-resets/confirm', { email, code, password }),
     },
 
+    /** backup de todos os dados do usuário; o arquivo é opaco para o front */
+    data: {
+      export: () => get<unknown>('/export'),
+      import: (file: unknown) => post<Message>('/import', file),
+    },
+
     accounts: {
       list: () => get<Account[]>('/accounts'),
       create: (body: AccountInput) => post<Account>('/accounts', body),
@@ -122,6 +129,8 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
       remove: (id: number) => del<{ archived: boolean }>(`/receivables/${id}`),
       paid: () => get<ReceivableInstallment[]>('/receivables/installments/paid'),
       setPaid: (id: number, paid: boolean) => patch<unknown>(`/receivables/installments/${id}`, { paid }),
+      updateInstallment: (id: number, body: InstallmentUpdateInput) =>
+        patch<unknown>(`/receivables/installments/${id}`, body),
     },
   };
 }
