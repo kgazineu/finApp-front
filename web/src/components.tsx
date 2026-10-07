@@ -192,8 +192,11 @@ export function Empty({ children }: { children: ReactNode }) {
   return <p className={cx(ui.muted, 'py-4 text-center')}>{children}</p>;
 }
 
-/** Lista que, no celular (e no PWA), mostra só os primeiros itens e uma seta para abrir o resto; em telas maiores mostra tudo. */
-export function Collapsible({ children, visible = 2 }: { children: ReactNode; visible?: number }) {
+/**
+ * Lista que mostra só os primeiros itens e uma seta para abrir o resto. Com phoneOnly isso vale só no
+ * celular (e no PWA); em telas maiores a lista aparece inteira.
+ */
+export function Collapsible({ children, visible = 2, phoneOnly = false }: { children: ReactNode; visible?: number; phoneOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   const items = Children.toArray(children);
   const rest = items.length - visible;
@@ -202,14 +205,19 @@ export function Collapsible({ children, visible = 2 }: { children: ReactNode; vi
       {items.map((item, index) =>
         open || index < visible ? (
           item
-        ) : (
+        ) : phoneOnly ? (
           <div key={isValidElement(item) ? item.key : index} className="max-sm:hidden">
             {item}
           </div>
-        ),
+        ) : null,
       )}
       {rest > 0 && (
-        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={cx(ui.link, 'flex cursor-pointer items-center justify-center gap-1 pt-2 sm:hidden')}>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          className={cx(ui.link, 'flex cursor-pointer items-center justify-center gap-1 pt-2', phoneOnly && 'sm:hidden')}
+        >
           {open ? 'Ver menos' : `Ver mais ${rest}`}
           <svg viewBox="0 0 20 20" aria-hidden="true" className={cx('h-4 w-4 transition-transform', open && 'rotate-180')}>
             <path d="M5 7.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

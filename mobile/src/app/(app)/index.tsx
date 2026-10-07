@@ -110,19 +110,19 @@ export default function Projection() {
               <Text className={p.projection.projectedAmount < 0 ? ui.bigNegative : ui.big}>{money(p.projection.projectedAmount)}</Text>
               <Text className={ui.small}>Conta como pago nesse dia 1 tudo que vence até o fim do mês, atrasados incluídos.</Text>
             </View>
-            {/* estes cinco somados dão o valor projetado */}
+            {/* último saldo registrado + crescimento total = valor projetado */}
             <View className="flex-row flex-wrap gap-y-2">
-              <Breakdown label="Último registro" cents={p.breakdown.lastTotal} />
+              <Breakdown label="Último saldo registrado" cents={p.breakdown.lastTotal} />
               <Breakdown label="Total de entradas" cents={p.breakdown.incomes} />
               <Breakdown label="Despesas fixas" cents={-p.breakdown.fixedExpenses} />
               <Breakdown label="Despesas variáveis" cents={-p.breakdown.variableExpenses} />
-              <Breakdown label="Recebimento total" cents={p.breakdown.receivables} />
+              <Breakdown label="Recebimento" cents={p.breakdown.receivables} />
+              <Breakdown label="Crescimento total" cents={p.breakdown.growth} />
             </View>
             {/* API antiga não manda os números por mês: somem em vez de quebrar a tela */}
             {p.monthly ? (
               <View className="gap-2 border-t border-slate-100 pt-3">
                 <View className="flex-row flex-wrap gap-y-2">
-                  <Breakdown label="Recebimento por mês" cents={p.monthly.receivables} />
                   <Breakdown label="Crescimento por mês" cents={p.monthly.growth} />
                   {p.monthly.goal !== null ? (
                     <>
@@ -132,9 +132,11 @@ export default function Projection() {
                   ) : null}
                 </View>
                 <Text className={ui.small}>
-                  Por mês: {formatMonth(p.monthly.month)}, pelo que está cadastrado. Crescimento = entradas + recebimentos − despesas fixas e
-                  variáveis, como na projeção.{' '}
-                  {p.monthly.goal === null ? 'Defina uma meta de guardar no Perfil para ver quanto sobra para gastar.' : 'A meta e o "para gastar" não mudam a projeção.'}
+                  Crescimento por mês: entradas fixas − despesas fixas de {formatMonth(p.monthly.month)}, o que se repete todo mês. Transações
+                  variáveis e recebimentos mudam de um mês para outro e entram só no crescimento total.{' '}
+                  {p.monthly.goal === null
+                    ? 'Defina uma meta de guardar no Perfil para ver quanto sobra para gastar.'
+                    : 'Para gastar = crescimento por mês − meta; as despesas variáveis saem daí. A meta não muda a projeção.'}
                 </Text>
                 <Checkbox checked={p.simulation.on} onChange={p.simulation.setOn} label="Simular um gasto por mês (só na tela, não salva nada)" />
                 {p.simulation.on ? (
@@ -165,10 +167,7 @@ export default function Projection() {
             ) : null}
             {p.upcoming.transactions.length + p.upcoming.receivables.length > 0 && (
               <View className="gap-1 border-t border-slate-100 pt-3">
-                <View className={ui.row}>
-                  <Text className={ui.label}>Vencem depois deste mês</Text>
-                  <Total cents={p.upcoming.total} />
-                </View>
+                <Text className={ui.label}>Vencem depois deste mês</Text>
                 <Text className={ui.small}>Só entram na conta da projeção. Pagou ou recebeu adiantado? Marque.</Text>
                 <Collapsible>
                   {p.upcoming.transactions.map((i) => (
@@ -210,18 +209,20 @@ export default function Projection() {
       <Card title="Marcadas nos últimos 30 dias">
         <Text className={ui.small}>Marcou errado? Desmarque e ela volta para as pendentes.</Text>
         {p.paid.length ? (
-          p.paid.map((i) => (
-            <Row key={i.key}>
-              <View className="flex-1 flex-row items-start gap-3">
-                <Checkbox checked onChange={() => p.setPaid(i.toggle, false)} ariaLabel={`Desmarcar ${i.label}`} />
-                <View className="flex-1 gap-1">
-                  <Text className={ui.strong}>{i.label}</Text>
-                  <Text className={ui.small}>Marcada em {formatDateTime(i.paidAt)}</Text>
+          <Collapsible>
+            {p.paid.map((i) => (
+              <Row key={i.key}>
+                <View className="flex-1 flex-row items-start gap-3">
+                  <Checkbox checked onChange={() => p.setPaid(i.toggle, false)} ariaLabel={`Desmarcar ${i.label}`} />
+                  <View className="flex-1 gap-1">
+                    <Text className={ui.strong}>{i.label}</Text>
+                    <Text className={ui.small}>Marcada em {formatDateTime(i.paidAt)}</Text>
+                  </View>
                 </View>
-              </View>
-              <Amount cents={i.amount} date={i.dueDate} />
-            </Row>
-          ))
+                <Amount cents={i.amount} date={i.dueDate} />
+              </Row>
+            ))}
+          </Collapsible>
         ) : (
           <Empty>Nada marcado nos últimos 30 dias.</Empty>
         )}
@@ -269,7 +270,7 @@ export default function Projection() {
 function Entries({ title, entries, total, empty, bill }: { title: string; entries: BillingEntry[]; total: number; empty: string; bill?: boolean }) {
   return (
     <View className="gap-1">
-      <Text className={ui.label}>{title}</Text>
+      <Text className="text-sm font-bold text-slate-900">{title}</Text>
       {entries.length ? (
         <>
           {entries.map((e) => (

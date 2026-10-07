@@ -218,7 +218,7 @@ function SavingsGoalCard() {
           value={form.value}
           mask={(v) => digits(v).slice(0, 3)}
           onChange={(value) => setForm({ ...form, value })}
-          hint="O que sobra = entradas + recebimentos − despesas fixas e variáveis do mês (o crescimento por mês)."
+          hint="O que sobra = o crescimento por mês: entradas fixas − despesas fixas."
         />
       ) : (
         <Field label="Quanto guardar por mês" prefix="R$" inputMode="numeric" value={form.value} mask={maskMoney} onChange={(value) => setForm({ ...form, value })} />

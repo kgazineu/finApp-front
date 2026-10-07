@@ -86,7 +86,7 @@ export function ProjectionPage() {
       <Card title="Transações pendentes" action={p.projection && <Total cents={p.current.transactionsTotal} />}>
         <p className={ui.small}>Vencidas e deste mês. Marque quando pagar ou receber.</p>
         {p.current.transactions.length ? (
-          <Collapsible>
+          <Collapsible phoneOnly>
             {p.current.transactions.map((i) => (
               <TransactionRow key={i.id} item={i} onPay={() => p.payTransaction(i.id, true)} />
             ))}
@@ -117,19 +117,19 @@ export function ProjectionPage() {
               <p className={p.projection.projectedAmount < 0 ? ui.bigNegative : ui.big}>{money(p.projection.projectedAmount)}</p>
               <p className={ui.small}>Conta como pago nesse dia 1 tudo que vence até o fim do mês, atrasados incluídos.</p>
             </div>
-            {/* estes cinco somados dão o valor projetado */}
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-5">
-              <Breakdown label="Último registro" cents={p.breakdown.lastTotal} />
+            {/* último saldo registrado + crescimento total = valor projetado */}
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+              <Breakdown label="Último saldo registrado" cents={p.breakdown.lastTotal} />
               <Breakdown label="Total de entradas" cents={p.breakdown.incomes} />
               <Breakdown label="Despesas fixas" cents={-p.breakdown.fixedExpenses} />
               <Breakdown label="Despesas variáveis" cents={-p.breakdown.variableExpenses} />
-              <Breakdown label="Recebimento total" cents={p.breakdown.receivables} />
+              <Breakdown label="Recebimento" cents={p.breakdown.receivables} />
+              <Breakdown label="Crescimento total" cents={p.breakdown.growth} />
             </dl>
             {/* API antiga não manda os números por mês: somem em vez de quebrar a tela durante o deploy */}
             {p.monthly && (
               <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-5">
-                  <Breakdown label="Recebimento por mês" cents={p.monthly.receivables} />
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
                   <Breakdown label="Crescimento por mês" cents={p.monthly.growth} />
                   {p.monthly.goal !== null && (
                     <>
@@ -139,8 +139,8 @@ export function ProjectionPage() {
                   )}
                 </dl>
                 <p className={ui.small}>
-                  Por mês: {formatMonth(p.monthly.month)}, pelo que está cadastrado. Crescimento = entradas + recebimentos − despesas fixas e
-                  variáveis, como na projeção.{' '}
+                  Crescimento por mês: entradas fixas − despesas fixas de {formatMonth(p.monthly.month)}, o que se repete todo mês. Transações
+                  variáveis e recebimentos mudam de um mês para outro e entram só no crescimento total.{' '}
                   {p.monthly.goal === null ? (
                     <>
                       Defina uma meta de guardar no{' '}
@@ -150,7 +150,7 @@ export function ProjectionPage() {
                       para ver quanto sobra para gastar.
                     </>
                   ) : (
-                    'A meta e o "para gastar" não mudam a projeção.'
+                    'Para gastar = crescimento por mês − meta; as despesas variáveis saem daí. A meta não muda a projeção.'
                   )}
                 </p>
                 <Checkbox checked={p.simulation.on} onChange={p.simulation.setOn} label="Simular um gasto por mês (só na tela, não salva nada)" />
@@ -185,10 +185,7 @@ export function ProjectionPage() {
             )}
             {p.upcoming.transactions.length + p.upcoming.receivables.length > 0 && (
               <div className="flex flex-col gap-1 border-t border-slate-100 pt-3">
-                <div className={ui.row}>
-                  <p className={ui.label}>Vencem depois deste mês</p>
-                  <Total cents={p.upcoming.total} />
-                </div>
+                <p className={ui.label}>Vencem depois deste mês</p>
                 <p className={ui.small}>Só entram na conta da projeção. Pagou ou recebeu adiantado? Marque.</p>
                 <Collapsible>
                   {p.upcoming.transactions.map((i) => (
@@ -230,18 +227,20 @@ export function ProjectionPage() {
       <Card title="Marcadas nos últimos 30 dias">
         <p className={ui.small}>Marcou errado? Desmarque e ela volta para as pendentes.</p>
         {p.paid.length ? (
-          p.paid.map((i) => (
-            <Row key={i.key}>
-              <div className="flex items-start gap-3">
-                <Checkbox checked onChange={() => p.setPaid(i.toggle, false)} ariaLabel={`Desmarcar ${i.label}`} />
-                <div className="flex flex-col gap-1">
-                  <p className={ui.strong}>{i.label}</p>
-                  <p className={ui.small}>Marcada em {formatDateTime(i.paidAt)}</p>
+          <Collapsible>
+            {p.paid.map((i) => (
+              <Row key={i.key}>
+                <div className="flex items-start gap-3">
+                  <Checkbox checked onChange={() => p.setPaid(i.toggle, false)} ariaLabel={`Desmarcar ${i.label}`} />
+                  <div className="flex flex-col gap-1">
+                    <p className={ui.strong}>{i.label}</p>
+                    <p className={ui.small}>Marcada em {formatDateTime(i.paidAt)}</p>
+                  </div>
                 </div>
-              </div>
-              <Amount cents={i.amount} date={i.dueDate} />
-            </Row>
-          ))
+                <Amount cents={i.amount} date={i.dueDate} />
+              </Row>
+            ))}
+          </Collapsible>
         ) : (
           <Empty>Nada marcado nos últimos 30 dias.</Empty>
         )}
@@ -294,7 +293,7 @@ export function ProjectionPage() {
 function Entries({ title, entries, total, empty, bill }: { title: string; entries: BillingEntry[]; total: number; empty: string; bill?: boolean }) {
   return (
     <div className="flex flex-col gap-1">
-      <p className={ui.label}>{title}</p>
+      <p className="text-sm font-bold text-slate-900">{title}</p>
       {entries.length ? (
         <>
           {entries.map((e) => (
@@ -303,7 +302,8 @@ function Entries({ title, entries, total, empty, bill }: { title: string; entrie
               <span className={cx('font-semibold', ui.amount(bill ? -e.amount : e.amount))}>{money(bill ? -e.amount : e.amount)}</span>
             </div>
           ))}
-          <div className="flex justify-between gap-3 border-t border-slate-100 pt-1 text-sm">
+          {/* mt-auto: lado a lado, o Total da coluna mais curta desce e fica na mesma linha do da outra */}
+          <div className="mt-auto flex justify-between gap-3 border-t border-slate-100 pt-1 text-sm">
             <span className={ui.strong}>Total</span>
             <span className={cx('font-semibold', ui.amount(total))}>{money(total)}</span>
           </div>

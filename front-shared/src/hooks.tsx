@@ -267,12 +267,18 @@ export function useProjection() {
 
   /** o que compõe o valor projetado: tudo até o fim do mês da projeção */
   const expenses = projection?.pendingTransactions.filter((i) => i.kind === 'expense') ?? [];
+  const incomes = sum(projection?.pendingTransactions.filter((i) => i.kind === 'income') ?? []);
+  const fixedExpenses = sum(expenses.filter((i) => i.isFixed));
+  const variableExpenses = sum(expenses.filter((i) => !i.isFixed));
+  const receivablesTotal = sum(projection?.pendingReceivables ?? []);
   const breakdown = projection && {
     lastTotal: last?.total ?? 0,
-    incomes: sum(projection.pendingTransactions.filter((i) => i.kind === 'income')),
-    fixedExpenses: sum(expenses.filter((i) => i.isFixed)),
-    variableExpenses: sum(expenses.filter((i) => !i.isFixed)),
-    receivables: sum(projection.pendingReceivables),
+    incomes,
+    fixedExpenses,
+    variableExpenses,
+    receivables: receivablesTotal,
+    /** crescimento total até a data da projeção: último saldo + isto = valor projetado */
+    growth: incomes + receivablesTotal - fixedExpenses - variableExpenses,
   };
 
   // o mês que vem: a meta e o "para gastar" só aparecem na tela, não mudam a projeção
@@ -310,11 +316,10 @@ export function useProjection() {
     last,
     balance: last ? balanceOf(last) : null,
     breakdown,
-    /** o mês que vem (null com API antiga): recebimento, o que sobra, meta e quanto dá para gastar */
+    /** o mês que vem (null com API antiga): crescimento por mês, meta e quanto dá para gastar */
     monthly: projection?.monthlyGrowthMonth
       ? {
           month: projection.monthlyGrowthMonth,
-          receivables: projection.monthlyReceivables ?? 0,
           growth,
           goal: goalAmount,
           goalPercent: goal?.percent ?? null,
@@ -341,7 +346,6 @@ export function useProjection() {
     upcoming: {
       transactions: transactions.upcoming,
       receivables: receivables.upcoming,
-      total: signedSum(transactions.upcoming) + sum(receivables.upcoming),
     },
     paid: query.data?.paid ?? [],
     payTransaction: (id: number, paid: boolean) => setPaid((p) => api.recurring.setPaid(id, p), paid),
