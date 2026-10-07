@@ -4,6 +4,7 @@ import {
   cx,
   formatDate,
   formatDateTime,
+  formatMonth,
   maskMoney,
   money,
   signedAmount,
@@ -18,9 +19,9 @@ import {
   type ReceivableInstallment,
   type TransactionInstallment,
 } from '@finapp/shared';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Badge, Button, Card, Checkbox, Empty, Field, FormError, Loading, Modal, NoticeBar, Row, Segmented } from '../components';
+import { Badge, Button, Card, Checkbox, Collapsible, Empty, Field, FormError, Loading, Modal, NoticeBar, Row, Segmented } from '../components';
 import { PageHeader } from '../layouts';
 
 const monthOptions = [
@@ -82,6 +83,31 @@ export function ProjectionPage() {
         )}
       </Card>
 
+      <Card title="Transações pendentes" action={p.projection && <Total cents={p.current.transactionsTotal} />}>
+        <p className={ui.small}>Vencidas e deste mês. Marque quando pagar ou receber.</p>
+        {p.current.transactions.length ? (
+          <Collapsible>
+            {p.current.transactions.map((i) => (
+              <TransactionRow key={i.id} item={i} onPay={() => p.payTransaction(i.id, true)} />
+            ))}
+          </Collapsible>
+        ) : (
+          <Empty>Nada pendente até o fim deste mês.</Empty>
+        )}
+      </Card>
+
+      <Card title="A receber pendentes" action={p.projection && <Total cents={p.current.receivablesTotal} />}>
+        {p.current.receivables.length ? (
+          <div className="flex flex-col">
+            {p.current.receivables.map((i) => (
+              <ReceivableRow key={i.id} item={i} onPay={() => p.payReceivable(i.id, true)} />
+            ))}
+          </div>
+        ) : (
+          <Empty>Ninguém te deve nada até o fim deste mês.</Empty>
+        )}
+      </Card>
+
       <Card>
         <Segmented label="Projetar para" value={p.months} options={monthOptions} onChange={p.setMonths} />
         {p.projection && p.breakdown ? (
@@ -91,47 +117,40 @@ export function ProjectionPage() {
               <p className={p.projection.projectedAmount < 0 ? ui.bigNegative : ui.big}>{money(p.projection.projectedAmount)}</p>
               <p className={ui.small}>Conta como pago nesse dia 1 tudo que vence até o fim do mês, atrasados incluídos.</p>
             </div>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-5">
               <Breakdown label="Último registro" cents={p.breakdown.lastTotal} />
               <Breakdown label="Entradas" cents={p.breakdown.incomes} />
               <Breakdown label="Despesas" cents={-p.breakdown.expenses} />
               <Breakdown label="A receber" cents={p.breakdown.receivables} />
+              {/* API antiga não manda o crescimento: some em vez de quebrar a tela durante o deploy */}
+              {p.projection.monthlyGrowthMonth && <Breakdown label="Crescimento por mês" cents={p.projection.monthlyGrowth} />}
             </dl>
+            {p.projection.monthlyGrowthMonth && (
+              <p className={ui.small}>
+                Crescimento por mês: entradas + a receber − despesas fixas de {formatMonth(p.projection.monthlyGrowthMonth)}, pelo que está
+                cadastrado (despesas variáveis e parcelamentos ficam de fora).
+              </p>
+            )}
             {p.upcoming.transactions.length + p.upcoming.receivables.length > 0 && (
               <div className="flex flex-col gap-1 border-t border-slate-100 pt-3">
                 <div className={ui.row}>
                   <p className={ui.label}>Vencem depois deste mês</p>
                   <Total cents={p.upcoming.total} />
                 </div>
-                <p className={ui.small}>Ainda não estão pendentes: só entram na conta da projeção. Se pagar ou receber adiantado, marque.</p>
-                {p.upcoming.transactions.map((i) => (
-                  <TransactionRow key={`t${i.id}`} item={i} onPay={() => p.payTransaction(i.id, true)} />
-                ))}
-                {p.upcoming.receivables.map((i) => (
-                  <ReceivableRow key={`r${i.id}`} item={i} onPay={() => p.payReceivable(i.id, true)} />
-                ))}
+                <p className={ui.small}>Só entram na conta da projeção. Pagou ou recebeu adiantado? Marque.</p>
+                <Collapsible>
+                  {p.upcoming.transactions.map((i) => (
+                    <TransactionRow key={`t${i.id}`} item={i} onPay={() => p.payTransaction(i.id, true)} />
+                  ))}
+                  {p.upcoming.receivables.map((i) => (
+                    <ReceivableRow key={`r${i.id}`} item={i} onPay={() => p.payReceivable(i.id, true)} />
+                  ))}
+                </Collapsible>
               </div>
             )}
           </div>
         ) : (
           <Loading />
-        )}
-      </Card>
-
-      <Card title="Transações pendentes" action={p.projection && <Total cents={p.current.transactionsTotal} />}>
-        <p className={ui.small}>Vencidas e deste mês. Em vermelho: atrasadas. Marque quando pagar ou receber.</p>
-        {p.current.transactions.length ? (
-          p.current.transactions.map((i) => <TransactionRow key={i.id} item={i} onPay={() => p.payTransaction(i.id, true)} />)
-        ) : (
-          <Empty>Nada pendente até o fim deste mês.</Empty>
-        )}
-      </Card>
-
-      <Card title="A receber pendentes" action={p.projection && <Total cents={p.current.receivablesTotal} />}>
-        {p.current.receivables.length ? (
-          p.current.receivables.map((i) => <ReceivableRow key={i.id} item={i} onPay={() => p.payReceivable(i.id, true)} />)
-        ) : (
-          <Empty>Ninguém te deve nada até o fim deste mês.</Empty>
         )}
       </Card>
 
@@ -244,47 +263,57 @@ function Entries({ title, entries, total, empty, bill }: { title: string; entrie
   );
 }
 
+// linha compacta das pendências: badges ao lado da descrição e o valor sempre à direita (não quebra para baixo)
+function PendingRow({ children, amount }: { children: ReactNode; amount: ReactNode }) {
+  return (
+    <div className={cx('flex items-center gap-3 py-2', ui.divider)}>
+      {children}
+      {amount}
+    </div>
+  );
+}
+
 function TransactionRow({ item: i, onPay }: { item: TransactionInstallment; onPay(): void }) {
   return (
-    <Row>
-      <div className="flex items-start gap-3">
-        <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como paga`} />
-        <div className="flex flex-col gap-1">
-          <p className={i.overdue ? ui.strongOverdue : ui.strong}>
-            {i.description} {!i.isFixed && <span className={ui.small}>· parcela {i.number}</span>}
-          </p>
-          <div className="flex flex-wrap gap-1">
-            <Badge tone={i.kind}>{transactionKindLabel[i.kind]}</Badge>
-            <Badge>{i.isFixed ? 'Fixa' : 'Variável'}</Badge>
-            {i.overdue && <Badge tone="danger">Atrasada</Badge>}
-          </div>
-        </div>
+    <PendingRow amount={<Amount cents={signedAmount(i)} date={i.dueDate} overdue={i.overdue} />}>
+      <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como paga`} />
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+        <p className={i.overdue ? ui.strongOverdue : ui.strong}>
+          {i.description} {!i.isFixed && <span className={ui.small}>· parcela {i.number}</span>}
+        </p>
+        <Badge tone={i.kind}>{transactionKindLabel[i.kind]}</Badge>
+        <Badge>{i.isFixed ? 'Fixa' : 'Variável'}</Badge>
+        {i.overdue && <Badge tone="danger">Atrasada</Badge>}
       </div>
-      <Amount cents={signedAmount(i)} date={i.dueDate} overdue={i.overdue} />
-    </Row>
+    </PendingRow>
   );
 }
 
 function ReceivableRow({ item: i, onPay }: { item: ReceivableInstallment; onPay(): void }) {
   return (
-    <Row>
-      <div className="flex items-start gap-3">
-        <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como recebida`} />
-        <div className="flex flex-col gap-1">
-          <p className={i.overdue ? ui.strongOverdue : ui.strong}>{i.description}</p>
-          <p className={ui.small}>
-            {i.debtor} · parcela {i.number}
-          </p>
-          {i.overdue && <Badge tone="danger">Atrasada</Badge>}
-        </div>
+    <PendingRow amount={<Amount cents={i.amount} date={i.dueDate} overdue={i.overdue} />}>
+      <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como recebida`} />
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+        <p className={i.overdue ? ui.strongOverdue : ui.strong}>
+          {i.description}{' '}
+          <span className={ui.small}>
+            · {i.debtor} · parcela {i.number}
+          </span>
+        </p>
+        {i.overdue && <Badge tone="danger">Atrasada</Badge>}
       </div>
-      <Amount cents={i.amount} date={i.dueDate} overdue={i.overdue} />
-    </Row>
+    </PendingRow>
   );
 }
 
+// no celular só o valor: a palavra "Total" fazia o cabeçalho quebrar em duas linhas
 function Total({ cents }: { cents: number }) {
-  return <p className={cx('font-semibold', ui.amount(cents))}>Total {signedMoney(cents)}</p>;
+  return (
+    <p className={cx('shrink-0 whitespace-nowrap font-semibold', ui.amount(cents))}>
+      <span className="max-sm:hidden">Total </span>
+      {signedMoney(cents)}
+    </p>
+  );
 }
 
 function Breakdown({ label, cents }: { label: string; cents: number }) {
@@ -298,7 +327,7 @@ function Breakdown({ label, cents }: { label: string; cents: number }) {
 
 function Amount({ cents, date, overdue }: { cents: number; date: string; overdue?: boolean }) {
   return (
-    <div className="flex flex-col items-end">
+    <div className="flex shrink-0 flex-col items-end">
       <p className={cx('text-sm font-semibold', ui.amount(cents))}>{money(cents)}</p>
       <p className={overdue ? ui.smallOverdue : ui.small}>vence {formatDate(date)}</p>
     </div>

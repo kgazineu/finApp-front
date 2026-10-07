@@ -141,6 +141,10 @@ export type Projection = {
   billingRegistrations: BillingRegistration[];
   projectedFor: string;
   projectedAmount: number;
+  /** no mês que vem: entradas + a receber − despesas fixas, pelas regras (pagas ou não) */
+  monthlyGrowth: number;
+  /** AAAA-MM do mês usado no crescimento */
+  monthlyGrowthMonth: string;
   pendingTransactions: TransactionInstallment[];
   pendingReceivables: ReceivableInstallment[];
 };

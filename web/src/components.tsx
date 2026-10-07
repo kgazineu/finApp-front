@@ -2,7 +2,7 @@
 // props e os mesmos tokens visuais (ui em @finapp/shared); só muda o elemento desenhado.
 
 import { cx, ui, type BadgeTone, type ButtonVariant, type Notice } from '@finapp/shared';
-import { useEffect, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react';
+import { Children, isValidElement, useEffect, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react';
 
 export function Button({
   variant = 'primary',
@@ -190,6 +190,34 @@ export function FormError({ error }: { error: string | null }) {
 
 export function Empty({ children }: { children: ReactNode }) {
   return <p className={cx(ui.muted, 'py-4 text-center')}>{children}</p>;
+}
+
+/** Lista que, no celular (e no PWA), mostra só os primeiros itens e uma seta para abrir o resto; em telas maiores mostra tudo. */
+export function Collapsible({ children, visible = 2 }: { children: ReactNode; visible?: number }) {
+  const [open, setOpen] = useState(false);
+  const items = Children.toArray(children);
+  const rest = items.length - visible;
+  return (
+    <div className="flex flex-col">
+      {items.map((item, index) =>
+        open || index < visible ? (
+          item
+        ) : (
+          <div key={isValidElement(item) ? item.key : index} className="max-sm:hidden">
+            {item}
+          </div>
+        ),
+      )}
+      {rest > 0 && (
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={cx(ui.link, 'flex cursor-pointer items-center justify-center gap-1 pt-2 sm:hidden')}>
+          {open ? 'Ver menos' : `Ver mais ${rest}`}
+          <svg viewBox="0 0 20 20" aria-hidden="true" className={cx('h-4 w-4 transition-transform', open && 'rotate-180')}>
+            <path d="M5 7.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function Row({ className, ...props }: HTMLAttributes<HTMLDivElement>) {

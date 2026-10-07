@@ -2,7 +2,8 @@
 // dos componentes da web (web/src/components.tsx); só muda o elemento nativo.
 
 import { cx, ui, type BadgeTone, type ButtonVariant, type Notice } from '@finapp/shared';
-import type { ReactNode } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Children, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -202,6 +203,30 @@ export function FormError({ error }: { error: string | null }) {
 
 export function Empty({ children }: { children: string }) {
   return <Text className={cx(ui.muted, 'py-4 text-center')}>{children}</Text>;
+}
+
+/** Lista que mostra só os primeiros itens e uma seta para abrir o resto: ocupa menos tela. */
+export function Collapsible({ children, visible = 2 }: { children: ReactNode; visible?: number }) {
+  const [open, setOpen] = useState(false);
+  const items = Children.toArray(children);
+  const rest = items.length - visible;
+  return (
+    <View>
+      {open ? items : items.slice(0, visible)}
+      {rest > 0 && (
+        <Pressable
+          onPress={() => setOpen(!open)}
+          accessibilityRole="button"
+          aria-expanded={open}
+          hitSlop={8}
+          className="flex-row items-center justify-center gap-1 pt-2"
+        >
+          <Text className={ui.link}>{open ? 'Ver menos' : `Ver mais ${rest}`}</Text>
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color="#047857" />
+        </Pressable>
+      )}
+    </View>
+  );
 }
 
 export function Row({ children, className }: { children: ReactNode; className?: string }) {

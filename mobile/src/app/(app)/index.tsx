@@ -4,6 +4,7 @@ import {
   cx,
   formatDate,
   formatDateTime,
+  formatMonth,
   maskMoney,
   money,
   signedAmount,
@@ -21,7 +22,7 @@ import {
 import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { Badge, Button, Card, Checkbox, Empty, Field, FormError, Loading, Modal, NoticeBar, PageHeader, Row, Screen, Segmented } from '@/components';
+import { Badge, Button, Card, Checkbox, Collapsible, Empty, Field, FormError, Loading, Modal, NoticeBar, PageHeader, Row, Screen, Segmented } from '@/components';
 
 const monthOptions = [
   { value: 1, label: '1 mês' },
@@ -75,6 +76,31 @@ export default function Projection() {
         )}
       </Card>
 
+      <Card title="Transações pendentes" action={p.projection && <Total cents={p.current.transactionsTotal} />}>
+        <Text className={ui.small}>Vencidas e deste mês. Marque quando pagar ou receber.</Text>
+        {p.current.transactions.length ? (
+          <Collapsible>
+            {p.current.transactions.map((i) => (
+              <TransactionRow key={i.id} item={i} onPay={() => p.payTransaction(i.id, true)} />
+            ))}
+          </Collapsible>
+        ) : (
+          <Empty>Nada pendente até o fim deste mês.</Empty>
+        )}
+      </Card>
+
+      <Card title="A receber pendentes" action={p.projection && <Total cents={p.current.receivablesTotal} />}>
+        {p.current.receivables.length ? (
+          <View>
+            {p.current.receivables.map((i) => (
+              <ReceivableRow key={i.id} item={i} onPay={() => p.payReceivable(i.id, true)} />
+            ))}
+          </View>
+        ) : (
+          <Empty>Ninguém te deve nada até o fim deste mês.</Empty>
+        )}
+      </Card>
+
       <Card>
         <Segmented label="Projetar para" value={p.months} options={monthOptions} onChange={p.setMonths} />
         {p.projection && p.breakdown ? (
@@ -89,42 +115,35 @@ export default function Projection() {
               <Breakdown label="Entradas" cents={p.breakdown.incomes} />
               <Breakdown label="Despesas" cents={-p.breakdown.expenses} />
               <Breakdown label="A receber" cents={p.breakdown.receivables} />
+              {/* API antiga não manda o crescimento: some em vez de quebrar a tela */}
+              {p.projection.monthlyGrowthMonth ? <Breakdown label="Crescimento por mês" cents={p.projection.monthlyGrowth} /> : null}
             </View>
+            {p.projection.monthlyGrowthMonth ? (
+              <Text className={ui.small}>
+                Crescimento por mês: entradas + a receber − despesas fixas de {formatMonth(p.projection.monthlyGrowthMonth)}, pelo que está
+                cadastrado (despesas variáveis e parcelamentos ficam de fora).
+              </Text>
+            ) : null}
             {p.upcoming.transactions.length + p.upcoming.receivables.length > 0 && (
               <View className="gap-1 border-t border-slate-100 pt-3">
                 <View className={ui.row}>
                   <Text className={ui.label}>Vencem depois deste mês</Text>
                   <Total cents={p.upcoming.total} />
                 </View>
-                <Text className={ui.small}>Ainda não estão pendentes: só entram na conta da projeção. Se pagar ou receber adiantado, marque.</Text>
-                {p.upcoming.transactions.map((i) => (
-                  <TransactionRow key={`t${i.id}`} item={i} onPay={() => p.payTransaction(i.id, true)} />
-                ))}
-                {p.upcoming.receivables.map((i) => (
-                  <ReceivableRow key={`r${i.id}`} item={i} onPay={() => p.payReceivable(i.id, true)} />
-                ))}
+                <Text className={ui.small}>Só entram na conta da projeção. Pagou ou recebeu adiantado? Marque.</Text>
+                <Collapsible>
+                  {p.upcoming.transactions.map((i) => (
+                    <TransactionRow key={`t${i.id}`} item={i} onPay={() => p.payTransaction(i.id, true)} />
+                  ))}
+                  {p.upcoming.receivables.map((i) => (
+                    <ReceivableRow key={`r${i.id}`} item={i} onPay={() => p.payReceivable(i.id, true)} />
+                  ))}
+                </Collapsible>
               </View>
             )}
           </View>
         ) : (
           <Loading />
-        )}
-      </Card>
-
-      <Card title="Transações pendentes" action={p.projection && <Total cents={p.current.transactionsTotal} />}>
-        <Text className={ui.small}>Vencidas e deste mês. Em vermelho: atrasadas. Marque quando pagar ou receber.</Text>
-        {p.current.transactions.length ? (
-          p.current.transactions.map((i) => <TransactionRow key={i.id} item={i} onPay={() => p.payTransaction(i.id, true)} />)
-        ) : (
-          <Empty>Nada pendente até o fim deste mês.</Empty>
-        )}
-      </Card>
-
-      <Card title="A receber pendentes" action={p.projection && <Total cents={p.current.receivablesTotal} />}>
-        {p.current.receivables.length ? (
-          p.current.receivables.map((i) => <ReceivableRow key={i.id} item={i} onPay={() => p.payReceivable(i.id, true)} />)
-        ) : (
-          <Empty>Ninguém te deve nada até o fim deste mês.</Empty>
         )}
       </Card>
 
@@ -232,52 +251,51 @@ function Entries({ title, entries, total, empty, bill }: { title: string; entrie
   );
 }
 
+// linha compacta das pendências: badges ao lado da descrição e o valor sempre à direita
 function TransactionRow({ item: i, onPay }: { item: TransactionInstallment; onPay(): void }) {
   return (
-    <Row>
-      <View className="flex-1 flex-row items-start gap-3">
-        <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como paga`} />
-        <View className="flex-1 gap-1">
-          <Text className={i.overdue ? ui.strongOverdue : ui.strong}>
-            {i.description}
-            {!i.isFixed && <Text className={ui.small}> · parcela {i.number}</Text>}
-          </Text>
-          <View className="flex-row flex-wrap gap-1">
-            <Badge tone={i.kind}>{transactionKindLabel[i.kind]}</Badge>
-            <Badge>{i.isFixed ? 'Fixa' : 'Variável'}</Badge>
-            {i.overdue && <Badge tone="danger">Atrasada</Badge>}
-          </View>
-        </View>
+    <View className={cx('flex-row items-center gap-3 py-2', ui.divider)}>
+      <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como paga`} />
+      <View className="flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+        <Text className={i.overdue ? ui.strongOverdue : ui.strong}>
+          {i.description}
+          {!i.isFixed && <Text className={ui.small}> · parcela {i.number}</Text>}
+        </Text>
+        <Badge tone={i.kind}>{transactionKindLabel[i.kind]}</Badge>
+        <Badge>{i.isFixed ? 'Fixa' : 'Variável'}</Badge>
+        {i.overdue && <Badge tone="danger">Atrasada</Badge>}
       </View>
       <Amount cents={signedAmount(i)} date={i.dueDate} overdue={i.overdue} />
-    </Row>
+    </View>
   );
 }
 
 function ReceivableRow({ item: i, onPay }: { item: ReceivableInstallment; onPay(): void }) {
   return (
-    <Row>
-      <View className="flex-1 flex-row items-start gap-3">
-        <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como recebida`} />
-        <View className="flex-1 gap-1">
-          <Text className={i.overdue ? ui.strongOverdue : ui.strong}>{i.description}</Text>
+    <View className={cx('flex-row items-center gap-3 py-2', ui.divider)}>
+      <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como recebida`} />
+      <View className="flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+        <Text className={i.overdue ? ui.strongOverdue : ui.strong}>
+          {i.description}
           <Text className={ui.small}>
-            {i.debtor} · parcela {i.number}
+            {' '}
+            · {i.debtor} · parcela {i.number}
           </Text>
-          {i.overdue && (
-            <View className="flex-row">
-              <Badge tone="danger">Atrasada</Badge>
-            </View>
-          )}
-        </View>
+        </Text>
+        {i.overdue && <Badge tone="danger">Atrasada</Badge>}
       </View>
       <Amount cents={i.amount} date={i.dueDate} overdue={i.overdue} />
-    </Row>
+    </View>
   );
 }
 
+// só o valor: com a palavra "Total" o cabeçalho quebrava em duas linhas
 function Total({ cents }: { cents: number }) {
-  return <Text className={cx('font-semibold', ui.amount(cents))}>Total {signedMoney(cents)}</Text>;
+  return (
+    <Text numberOfLines={1} className={cx('font-semibold', ui.amount(cents))}>
+      {signedMoney(cents)}
+    </Text>
+  );
 }
 
 function Breakdown({ label, cents }: { label: string; cents: number }) {
