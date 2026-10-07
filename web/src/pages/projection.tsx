@@ -15,6 +15,8 @@ import {
   type Account,
   type BillingEntry,
   type BillingForm,
+  type ReceivableInstallment,
+  type TransactionInstallment,
 } from '@finapp/shared';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
@@ -91,61 +93,45 @@ export function ProjectionPage() {
             </div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
               <Breakdown label="Último registro" cents={p.breakdown.lastTotal} />
-              <Breakdown label="Entradas pendentes" cents={p.breakdown.incomes} />
-              <Breakdown label="Despesas pendentes" cents={-p.breakdown.expenses} />
+              <Breakdown label="Entradas" cents={p.breakdown.incomes} />
+              <Breakdown label="Despesas" cents={-p.breakdown.expenses} />
               <Breakdown label="A receber" cents={p.breakdown.receivables} />
             </dl>
+            {p.upcoming.transactions.length + p.upcoming.receivables.length > 0 && (
+              <div className="flex flex-col gap-1 border-t border-slate-100 pt-3">
+                <div className={ui.row}>
+                  <p className={ui.label}>Vencem depois deste mês</p>
+                  <Total cents={p.upcoming.total} />
+                </div>
+                <p className={ui.small}>Ainda não estão pendentes: só entram na conta da projeção. Se pagar ou receber adiantado, marque.</p>
+                {p.upcoming.transactions.map((i) => (
+                  <TransactionRow key={`t${i.id}`} item={i} onPay={() => p.payTransaction(i.id, true)} />
+                ))}
+                {p.upcoming.receivables.map((i) => (
+                  <ReceivableRow key={`r${i.id}`} item={i} onPay={() => p.payReceivable(i.id, true)} />
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <Loading />
         )}
       </Card>
 
-      <Card title="Transações pendentes" action={p.breakdown && <Total cents={p.breakdown.transactions} />}>
-        <p className={ui.small}>Em vermelho: atrasadas. Marque quando pagar ou receber. O total soma tudo da lista, atrasadas incluídas.</p>
-        {p.projection?.pendingTransactions.length ? (
-          p.projection.pendingTransactions.map((i) => (
-            <Row key={i.id}>
-              <div className="flex items-start gap-3">
-                <Checkbox checked={false} onChange={() => p.payTransaction(i.id, true)} ariaLabel={`Marcar ${i.description} como paga`} />
-                <div className="flex flex-col gap-1">
-                  <p className={i.overdue ? ui.strongOverdue : ui.strong}>
-                    {i.description} {!i.isFixed && <span className={ui.small}>· parcela {i.number}</span>}
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge tone={i.kind}>{transactionKindLabel[i.kind]}</Badge>
-                    <Badge>{i.isFixed ? 'Fixa' : 'Variável'}</Badge>
-                    {i.overdue && <Badge tone="danger">Atrasada</Badge>}
-                  </div>
-                </div>
-              </div>
-              <Amount cents={signedAmount(i)} date={i.dueDate} overdue={i.overdue} />
-            </Row>
-          ))
+      <Card title="Transações pendentes" action={p.projection && <Total cents={p.current.transactionsTotal} />}>
+        <p className={ui.small}>Vencidas e deste mês. Em vermelho: atrasadas. Marque quando pagar ou receber.</p>
+        {p.current.transactions.length ? (
+          p.current.transactions.map((i) => <TransactionRow key={i.id} item={i} onPay={() => p.payTransaction(i.id, true)} />)
         ) : (
-          <Empty>Nada pendente até o fim do período.</Empty>
+          <Empty>Nada pendente até o fim deste mês.</Empty>
         )}
       </Card>
 
-      <Card title="A receber pendentes" action={p.breakdown && <Total cents={p.breakdown.receivables} />}>
-        {p.projection?.pendingReceivables.length ? (
-          p.projection.pendingReceivables.map((i) => (
-            <Row key={i.id}>
-              <div className="flex items-start gap-3">
-                <Checkbox checked={false} onChange={() => p.payReceivable(i.id, true)} ariaLabel={`Marcar ${i.description} como recebida`} />
-                <div className="flex flex-col gap-1">
-                  <p className={i.overdue ? ui.strongOverdue : ui.strong}>{i.description}</p>
-                  <p className={ui.small}>
-                    {i.debtor} · parcela {i.number}
-                  </p>
-                  {i.overdue && <Badge tone="danger">Atrasada</Badge>}
-                </div>
-              </div>
-              <Amount cents={i.amount} date={i.dueDate} overdue={i.overdue} />
-            </Row>
-          ))
+      <Card title="A receber pendentes" action={p.projection && <Total cents={p.current.receivablesTotal} />}>
+        {p.current.receivables.length ? (
+          p.current.receivables.map((i) => <ReceivableRow key={i.id} item={i} onPay={() => p.payReceivable(i.id, true)} />)
         ) : (
-          <Empty>Ninguém te deve nada até o fim do período.</Empty>
+          <Empty>Ninguém te deve nada até o fim deste mês.</Empty>
         )}
       </Card>
 
@@ -255,6 +241,45 @@ function Entries({ title, entries, total, empty, bill }: { title: string; entrie
         <p className={ui.small}>{empty}</p>
       )}
     </div>
+  );
+}
+
+function TransactionRow({ item: i, onPay }: { item: TransactionInstallment; onPay(): void }) {
+  return (
+    <Row>
+      <div className="flex items-start gap-3">
+        <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como paga`} />
+        <div className="flex flex-col gap-1">
+          <p className={i.overdue ? ui.strongOverdue : ui.strong}>
+            {i.description} {!i.isFixed && <span className={ui.small}>· parcela {i.number}</span>}
+          </p>
+          <div className="flex flex-wrap gap-1">
+            <Badge tone={i.kind}>{transactionKindLabel[i.kind]}</Badge>
+            <Badge>{i.isFixed ? 'Fixa' : 'Variável'}</Badge>
+            {i.overdue && <Badge tone="danger">Atrasada</Badge>}
+          </div>
+        </div>
+      </div>
+      <Amount cents={signedAmount(i)} date={i.dueDate} overdue={i.overdue} />
+    </Row>
+  );
+}
+
+function ReceivableRow({ item: i, onPay }: { item: ReceivableInstallment; onPay(): void }) {
+  return (
+    <Row>
+      <div className="flex items-start gap-3">
+        <Checkbox checked={false} onChange={onPay} ariaLabel={`Marcar ${i.description} como recebida`} />
+        <div className="flex flex-col gap-1">
+          <p className={i.overdue ? ui.strongOverdue : ui.strong}>{i.description}</p>
+          <p className={ui.small}>
+            {i.debtor} · parcela {i.number}
+          </p>
+          {i.overdue && <Badge tone="danger">Atrasada</Badge>}
+        </div>
+      </div>
+      <Amount cents={i.amount} date={i.dueDate} overdue={i.overdue} />
+    </Row>
   );
 }
 

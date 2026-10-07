@@ -19,9 +19,9 @@ import {
   type RecurringEditForm,
   type RecurringForm,
 } from './forms';
-import { money, signedMoney } from './format';
+import { money, signedMoney, splitByMonth } from './format';
 import { signedAmount } from './labels';
-import type { Account, BillingRegistration, Installment, Projection, Receivable, RecurringTransaction, User } from './types';
+import type { Account, BillingRegistration, Installment, Projection, Receivable, RecurringTransaction, TransactionInstallment, User } from './types';
 
 // ---------- cache ----------
 
@@ -262,16 +262,18 @@ export function useProjection() {
   const registrations = projection ? [...projection.billingRegistrations].reverse() : [];
   const last = projection?.billingRegistrations.at(-1) ?? null;
 
-  const incomes = sum(projection?.pendingTransactions.filter((i) => i.kind === 'income') ?? []);
-  const expenses = sum(projection?.pendingTransactions.filter((i) => i.kind === 'expense') ?? []);
+  /** o que compõe o valor projetado: tudo até o fim do mês da projeção */
   const breakdown = projection && {
     lastTotal: last?.total ?? 0,
-    incomes,
-    expenses,
-    /** soma do que está na lista de transações pendentes: entradas − despesas, atrasadas incluídas */
-    transactions: incomes - expenses,
+    incomes: sum(projection.pendingTransactions.filter((i) => i.kind === 'income')),
+    expenses: sum(projection.pendingTransactions.filter((i) => i.kind === 'expense')),
     receivables: sum(projection.pendingReceivables),
   };
+
+  // pendência de verdade é o que já venceu ou vence até o fim deste mês; o que vence depois só entra
+  // na conta da projeção (com "1 mês", o salário do mês que vem não é pendência)
+  const transactions = splitByMonth(projection?.pendingTransactions ?? []);
+  const receivables = splitByMonth(projection?.pendingReceivables ?? []);
 
   /** marca/desmarca parcela; a projeção é recalculada em seguida */
   async function setPaid(toggle: (paid: boolean) => Promise<unknown>, paid: boolean) {
@@ -293,6 +295,19 @@ export function useProjection() {
     last,
     balance: last ? balanceOf(last) : null,
     breakdown,
+    /** pendentes agora: vencidas e do mês atual (não mudam com os meses da projeção) */
+    current: {
+      transactions: transactions.current,
+      receivables: receivables.current,
+      transactionsTotal: signedSum(transactions.current),
+      receivablesTotal: sum(receivables.current),
+    },
+    /** vencem depois deste mês e até o fim do mês da projeção */
+    upcoming: {
+      transactions: transactions.upcoming,
+      receivables: receivables.upcoming,
+      total: signedSum(transactions.upcoming) + sum(receivables.upcoming),
+    },
     paid: query.data?.paid ?? [],
     payTransaction: (id: number, paid: boolean) => setPaid((p) => api.recurring.setPaid(id, p), paid),
     payReceivable: (id: number, paid: boolean) => setPaid((p) => api.receivables.setPaid(id, p), paid),
@@ -309,6 +324,8 @@ export function useProjection() {
 }
 
 const sum = (items: { amount: number }[]) => items.reduce((total, i) => total + i.amount, 0);
+/** entradas − despesas */
+const signedSum = (items: TransactionInstallment[]) => items.reduce((total, i) => total + signedAmount(i), 0);
 
 /** saldo atual = último registro de saldos, separado em contas e faturas (o delta é null no primeiro) */
 function balanceOf(reg: BillingRegistration) {

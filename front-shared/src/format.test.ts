@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { centsToInput, money, formatDate, maskDate, maskMoney, maskMonth, parseDate, parseMoney, parseMonth } from './format.ts';
+import { centsToInput, money, formatDate, maskDate, maskMoney, maskMonth, parseDate, parseMoney, parseMonth, splitByMonth } from './format.ts';
 
 test('dinheiro: máscara e conversão para centavos', () => {
   assert.equal(maskMoney('1'), '0,01');
@@ -23,4 +23,14 @@ test('datas: máscara, validação e formato ISO da API', () => {
   assert.equal(parseMonth('10/2026'), '2026-10');
   assert.equal(parseMonth('13/2026'), null);
   assert.equal(formatDate('2026-10-31'), '31/10/2026');
+});
+
+test('pendências: até o fim deste mês ficam em current, o resto em upcoming', () => {
+  const due = (...dates: string[]) => dates.map((dueDate) => ({ dueDate }));
+  const split = (now: Date) => {
+    const { current, upcoming } = splitByMonth(due('2026-09-01', '2026-10-31', '2026-11-01', '2027-01-05'), now);
+    return [current.map((i) => i.dueDate), upcoming.map((i) => i.dueDate)];
+  };
+  assert.deepEqual(split(new Date(2026, 9, 6)), [['2026-09-01', '2026-10-31'], ['2026-11-01', '2027-01-05']]);
+  assert.deepEqual(split(new Date(2026, 11, 31)), [['2026-09-01', '2026-10-31', '2026-11-01'], ['2027-01-05']]); // virada do ano
 });

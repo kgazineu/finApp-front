@@ -80,3 +80,9 @@ export function endOfThisMonth(now = new Date()): string {
   const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return `${pad(last.getDate())}/${pad(last.getMonth() + 1)}/${last.getFullYear()}`;
 }
+
+/** separa por vencimento: até o fim deste mês (vencidas e do mês) e depois dele */
+export function splitByMonth<T extends { dueDate: string }>(items: T[], now = new Date()) {
+  const monthEnd = parseDate(endOfThisMonth(now)) ?? '';
+  return { current: items.filter((i) => i.dueDate <= monthEnd), upcoming: items.filter((i) => i.dueDate > monthEnd) };
+}
