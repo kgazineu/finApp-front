@@ -10,7 +10,7 @@ import {
   type AccountKind,
 } from '@finapp/shared';
 import { useState, type FormEvent } from 'react';
-import { Badge, Button, Card, Checkbox, Empty, Field, FormError, Loading, Modal, NoticeBar, Row, Segmented, confirmAction } from '../components';
+import { Actions, Badge, Button, Card, Checkbox, Empty, Field, FormError, ItemActions, Loading, Modal, NoticeBar, Row, Segmented, confirmAction } from '../components';
 import { PageHeader } from '../layouts';
 
 const kindOptions: { value: AccountKind; label: string }[] = [
@@ -56,21 +56,18 @@ export function AccountsPage() {
         ) : a.data?.length ? (
           a.data.map((account) => (
             <Row key={account.id}>
-              <div className="flex flex-col gap-1">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <p className={ui.strong}>{account.name}</p>
                 <div className="flex flex-wrap gap-1">
                   <Badge tone={account.kind === 'asset' ? 'income' : 'expense'}>{accountKindLabel[account.kind]}</Badge>
                   {account.hasYield && <Badge>Rende</Badge>}
                 </div>
               </div>
-              <div className="flex">
-                <Button variant="ghost" onClick={() => (save.clearError(), setEditing({ id: account.id, form: accountToForm(account) }))}>
-                  Editar
-                </Button>
-                <Button variant="ghostDanger" onClick={() => remove(account)}>
-                  Remover
-                </Button>
-              </div>
+              <ItemActions
+                name={account.name}
+                onEdit={() => (save.clearError(), setEditing({ id: account.id, form: accountToForm(account) }))}
+                onRemove={() => remove(account)}
+              />
             </Row>
           ))
         ) : (
@@ -90,14 +87,14 @@ export function AccountsPage() {
               <p className={ui.small}>Passivo não tem rendimento. Informe a fatura como valor positivo nos registros de saldo.</p>
             )}
             <FormError error={save.error} />
-            <div className="flex justify-end gap-2">
+            <Actions>
               <Button variant="secondary" onClick={() => setEditing(null)}>
                 Cancelar
               </Button>
               <Button type="submit" busy={save.busy}>
                 Salvar
               </Button>
-            </div>
+            </Actions>
           </form>
         )}
       </Modal>

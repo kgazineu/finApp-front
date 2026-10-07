@@ -14,7 +14,7 @@ import {
 } from '@finapp/shared';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { Button, Card, Empty, Field, FormError, Loading, Modal, NoticeBar, Segmented, confirmAction } from '../components';
+import { Actions, Button, Card, Empty, Field, FormError, ItemActions, Loading, Modal, NoticeBar, Segmented, confirmAction } from '../components';
 import { PageHeader } from '../layouts';
 
 type Item = ReturnType<typeof useTargets>['items'][number];
@@ -82,7 +82,7 @@ export function TargetsPage() {
               value={editing.form.name}
               onChange={(name) => setEditing({ ...editing, form: { ...editing.form, name } })}
             />
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 items-end gap-3">
               <Field
                 className="flex-1"
                 label="Quanto quer juntar"
@@ -110,14 +110,14 @@ export function TargetsPage() {
             />
             <p className={ui.small}>Saldo total é a soma das contas menos as faturas. Fatura não pode ser meta.</p>
             <FormError error={save.error} />
-            <div className="flex justify-end gap-2">
+            <Actions>
               <Button variant="secondary" onClick={() => setEditing(null)}>
                 Cancelar
               </Button>
               <Button type="submit" busy={save.busy}>
                 {editing.id ? 'Salvar' : 'Criar meta'}
               </Button>
-            </div>
+            </Actions>
           </form>
         )}
       </Modal>
@@ -128,13 +128,14 @@ export function TargetsPage() {
 function TargetItem({ item, onEdit, onRemove }: { item: Item; onEdit(): void; onRemove(): void }) {
   const behind = item.status === 'late' || item.status === 'expired';
   return (
-    <div className={cx('flex flex-col gap-2 py-3', ui.divider)}>
-      <div className={ui.row}>
-        <p className={ui.strong}>{item.target.name}</p>
+    <div className={cx('flex flex-col gap-2 py-3 first:pt-0 last:border-b-0', ui.divider)}>
+      <div className="flex items-center gap-3">
+        <p className={cx(ui.strong, 'min-w-0 flex-1')}>{item.target.name}</p>
         <p className={cx('text-sm font-bold', item.status === 'done' ? 'text-emerald-700' : 'text-slate-900')}>{item.percent}%</p>
+        <ItemActions name={item.target.name} onEdit={onEdit} onRemove={onRemove} />
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-        <div className={cx('h-2 rounded-full', behind ? 'bg-amber-500' : 'bg-emerald-600')} style={{ width: `${item.percent}%` }} />
+      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+        <div className={cx('h-full rounded-full transition-[width] duration-500', behind ? 'bg-amber-500' : 'bg-emerald-600')} style={{ width: `${item.percent}%` }} />
       </div>
       <p className={ui.small}>
         {money(item.current)} de {money(item.target.amount)} · {item.base} · prazo {formatDate(item.target.deadline)}
@@ -143,14 +144,6 @@ function TargetItem({ item, onEdit, onRemove }: { item: Item; onEdit(): void; on
         {item.message}
         {item.perMonth !== null && item.status !== 'onTime' && ` Para chegar no prazo: ${money(item.perMonth)} por mês.`}
       </p>
-      <div className="flex gap-2">
-        <Button variant="ghost" onClick={onEdit}>
-          Editar
-        </Button>
-        <Button variant="ghostDanger" onClick={onRemove}>
-          Remover
-        </Button>
-      </div>
     </div>
   );
 }
