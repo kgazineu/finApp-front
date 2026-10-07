@@ -3,5 +3,6 @@ export * from './format';
 export * from './forms';
 export * from './hooks';
 export * from './labels';
+export * from './targets';
 export * from './types';
 export * from './ui';

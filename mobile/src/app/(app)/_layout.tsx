@@ -8,6 +8,7 @@ const tabs: { name: string; title: string; icon: Icon }[] = [
   { name: 'index', title: 'Início', icon: 'trending-up' },
   { name: 'transacoes', title: 'Transações', icon: 'swap-vertical' },
   { name: 'a-receber', title: 'A receber', icon: 'cash-outline' },
+  { name: 'metas', title: 'Metas', icon: 'flag-outline' },
   { name: 'contas', title: 'Contas', icon: 'wallet-outline' },
   { name: 'perfil', title: 'Perfil', icon: 'person-circle-outline' },
 ];

@@ -9,6 +9,7 @@ import { ForgotPasswordPage, LoginPage, NewPasswordPage, RegisterPage, ResetCode
 import { ProfilePage } from './pages/profile';
 import { ProjectionPage } from './pages/projection';
 import { ReceivablesPage } from './pages/receivables';
+import { TargetsPage } from './pages/targets';
 import { TransactionsPage } from './pages/transactions';
 
 const TOKEN_KEY = 'finapp.token';
@@ -42,6 +43,7 @@ function App() {
         <Route path="/" element={<ProjectionPage />} />
         <Route path="/transacoes" element={<TransactionsPage />} />
         <Route path="/a-receber" element={<ReceivablesPage />} />
+        <Route path="/metas" element={<TargetsPage />} />
         <Route path="/contas" element={<AccountsPage />} />
         <Route path="/perfil" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

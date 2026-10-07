@@ -132,13 +132,9 @@ export default function Projection() {
                   ) : null}
                 </View>
                 <Text className={ui.small}>
-                  Crescimento por mês: entradas fixas − despesas fixas de {formatMonth(p.monthly.month)}, o que se repete todo mês. Transações
-                  variáveis e recebimentos mudam de um mês para outro e entram só no crescimento total.{' '}
-                  {p.monthly.goal === null
-                    ? 'Defina uma meta de guardar no Perfil para ver quanto sobra para gastar.'
-                    : 'Para gastar = crescimento por mês − meta; as despesas variáveis saem daí. A meta não muda a projeção.'}
+                  Por mês ({formatMonth(p.monthly.month)}): só entradas e despesas fixas.{p.monthly.goal === null ? ' Defina sua reserva mensal no Perfil.' : ''}
                 </Text>
-                <Checkbox checked={p.simulation.on} onChange={p.simulation.setOn} label="Simular um gasto por mês (só na tela, não salva nada)" />
+                <Checkbox checked={p.simulation.on} onChange={p.simulation.setOn} label="Simular um gasto por mês" />
                 {p.simulation.on ? (
                   <View className="gap-2">
                     <Field
@@ -159,7 +155,7 @@ export default function Projection() {
                       <Breakdown label="Sobraria por mês" cents={p.simulation.growth} />
                     </View>
                     <Text className={ui.small}>
-                      Tira o gasto de cada um dos {p.months} {p.months === 1 ? 'mês' : 'meses'} da projeção. A projeção de verdade continua a de cima.
+                      Tira o gasto de cada um dos {p.months} {p.months === 1 ? 'mês' : 'meses'} da projeção. Só na tela: nada é salvo.
                     </Text>
                   </View>
                 ) : null}

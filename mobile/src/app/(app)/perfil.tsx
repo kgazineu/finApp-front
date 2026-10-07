@@ -157,7 +157,7 @@ export default function Profile() {
   );
 }
 
-/** meta de guardar por mês: só um número para a tela inicial (quanto guardar e quanto sobra para gastar) */
+/** reserva mensal (quanto guardar por mês): só um número para a tela inicial (quanto guardar e quanto sobra para gastar) */
 function SavingsGoalCard() {
   const goal = useSavingsGoal();
   const [form, setForm] = useState<SavingsGoalForm>(() => savingsGoalToForm(goal.data));
@@ -169,8 +169,8 @@ function SavingsGoalCard() {
   const hasGoal = goal.data?.percent != null || goal.data?.amount != null;
 
   return (
-    <Card title="Meta de guardar por mês">
-      <Text className={ui.muted}>Quanto você quer guardar todo mês. A tela inicial mostra a meta e quanto sobra para gastar; a projeção não muda.</Text>
+    <Card title="Reserva mensal">
+      <Text className={ui.muted}>Quanto você quer guardar todo mês. A tela inicial mostra a reserva e quanto sobra para gastar; a projeção não muda.</Text>
       <NoticeBar notice={goal.notice} onClose={goal.clear} />
       <Segmented
         value={form.kind}
@@ -195,11 +195,11 @@ function SavingsGoalCard() {
       )}
       <FormError error={save.error ?? remove.error} />
       <Button busy={save.busy} onPress={() => (remove.clearError(), save.run())}>
-        Salvar meta
+        Salvar reserva
       </Button>
       {hasGoal ? (
         <Button variant="secondary" busy={remove.busy} onPress={() => (save.clearError(), remove.run())}>
-          Remover meta
+          Remover reserva
         </Button>
       ) : null}
     </Card>

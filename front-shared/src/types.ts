@@ -149,7 +149,12 @@ export type Projection = {
   pendingReceivables: ReceivableInstallment[];
 };
 
-/** meta de guardar por mês: porcentagem do que sobra ou valor fixo; os dois nulos = sem meta */
+/** reserva mensal (quanto guardar por mês): porcentagem do crescimento por mês ou valor fixo; os dois nulos = sem reserva */
 export type SavingsGoal = { percent: number | null; amount: number | null };
+
+/** meta: chegar a um valor até uma data, pelo saldo total (accountId null) ou de uma conta de saldo */
+export type Target = { id: number; name: string; amount: number; deadline: string; accountId: number | null; createdAt: string };
+
+export type TargetInput = Pick<Target, 'name' | 'amount' | 'deadline' | 'accountId'>;
 
 export type Message = { message: string };

@@ -17,6 +17,8 @@ import type {
   RecurringTransaction,
   RecurringUpdateInput,
   SavingsGoal,
+  Target,
+  TargetInput,
   TransactionKind,
 } from './types';
 
@@ -52,7 +54,22 @@ export const accountPayload = (f: AccountForm): AccountInput => ({
   hasYield: f.kind === 'asset' && f.hasYield, // passivo nunca rende
 });
 
-// ---------- meta de guardar ----------
+// ---------- meta ----------
+
+export type TargetForm = { name: string; amount: string; deadline: string; accountId: number | null };
+
+export const emptyTargetForm = (): TargetForm => ({ name: '', amount: '', deadline: '', accountId: null });
+
+export const targetToForm = (t: Target): TargetForm => ({ name: t.name, amount: centsToInput(t.amount), deadline: formatDate(t.deadline), accountId: t.accountId });
+
+export const targetPayload = (f: TargetForm): TargetInput => ({
+  name: required(f.name, 'o nome da meta'),
+  amount: positiveMoney(f.amount, 'quanto quer juntar'),
+  deadline: parseDate(f.deadline) ?? fail('Informe o prazo como DD/MM/AAAA'),
+  accountId: f.accountId,
+});
+
+// ---------- reserva mensal ----------
 
 export type SavingsGoalForm = { kind: 'percent' | 'amount'; value: string };
 

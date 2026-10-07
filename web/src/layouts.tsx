@@ -6,6 +6,7 @@ export const links = [
   { to: '/', label: 'Início' },
   { to: '/transacoes', label: 'Transações' },
   { to: '/a-receber', label: 'A receber' },
+  { to: '/metas', label: 'Metas' },
   { to: '/contas', label: 'Contas' },
   { to: '/perfil', label: 'Perfil' },
 ];

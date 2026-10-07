@@ -14,6 +14,8 @@ import type {
   RecurringUpdateInput,
   SavingsGoal,
   Session,
+  Target,
+  TargetInput,
   TransactionInstallment,
   User,
 } from './types';
@@ -99,7 +101,15 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
         post<Message>('/password-resets/confirm', { email, code, password }),
     },
 
-    /** meta de guardar por mês: só aparece na tela inicial, não muda a projeção */
+    /** metas: o progresso é calculado na tela, pelo último registro de saldos */
+    targets: {
+      list: () => get<Target[]>('/targets'),
+      create: (body: TargetInput) => post<Target>('/targets', body),
+      update: (id: number, body: TargetInput) => patch<Target>(`/targets/${id}`, body),
+      remove: (id: number) => del<Message>(`/targets/${id}`),
+    },
+
+    /** reserva mensal (quanto guardar por mês): só aparece na tela inicial, não muda a projeção */
     savingsGoal: {
       get: () => get<SavingsGoal>('/savings-goal'),
       save: (body: SavingsGoal) => put<SavingsGoal>('/savings-goal', body),

@@ -139,21 +139,19 @@ export function ProjectionPage() {
                   )}
                 </dl>
                 <p className={ui.small}>
-                  Crescimento por mês: entradas fixas − despesas fixas de {formatMonth(p.monthly.month)}, o que se repete todo mês. Transações
-                  variáveis e recebimentos mudam de um mês para outro e entram só no crescimento total.{' '}
-                  {p.monthly.goal === null ? (
+                  Por mês ({formatMonth(p.monthly.month)}): só entradas e despesas fixas.
+                  {p.monthly.goal === null && (
                     <>
-                      Defina uma meta de guardar no{' '}
+                      {' '}
+                      Defina sua reserva mensal no{' '}
                       <Link to="/perfil" className={ui.link}>
                         Perfil
-                      </Link>{' '}
-                      para ver quanto sobra para gastar.
+                      </Link>
+                      .
                     </>
-                  ) : (
-                    'Para gastar = crescimento por mês − meta; as despesas variáveis saem daí. A meta não muda a projeção.'
                   )}
                 </p>
-                <Checkbox checked={p.simulation.on} onChange={p.simulation.setOn} label="Simular um gasto por mês (só na tela, não salva nada)" />
+                <Checkbox checked={p.simulation.on} onChange={p.simulation.setOn} label="Simular um gasto por mês" />
                 {p.simulation.on && (
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
                     <Field
@@ -178,7 +176,7 @@ export function ProjectionPage() {
                 )}
                 {p.simulation.on && (
                   <p className={ui.small}>
-                    Tira o gasto de cada um dos {p.months} {p.months === 1 ? 'mês' : 'meses'} da projeção. A projeção de verdade continua a de cima.
+                    Tira o gasto de cada um dos {p.months} {p.months === 1 ? 'mês' : 'meses'} da projeção. Só na tela: nada é salvo.
                   </p>
                 )}
               </div>
@@ -206,18 +204,18 @@ export function ProjectionPage() {
       <Card title="Registros de saldo">
         {p.registrations.length ? (
           p.registrations.map((r) => (
-            <Row key={r.id}>
-              <div className="flex flex-col gap-1">
+            <div key={r.id} className={cx('flex items-start gap-3 py-3', ui.divider)}>
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <p className={ui.strong}>
                   #{r.id} · {formatDateTime(r.createdAt)}
                 </p>
                 <p className={ui.small}>{r.entries.map((e) => `${e.accountName}: ${money(e.amount)}`).join(' · ')}</p>
               </div>
-              <div className="flex flex-col items-end">
+              <div className="flex shrink-0 flex-col items-end">
                 <p className={ui.strong}>{money(r.total)}</p>
                 <p className={cx('text-sm font-semibold', ui.amount(r.delta ?? 0))}>{deltaText(r.delta)}</p>
               </div>
-            </Row>
+            </div>
           ))
         ) : (
           <Empty>Nenhum registro ainda. Registre o saldo das suas contas para começar.</Empty>

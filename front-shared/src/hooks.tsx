@@ -12,6 +12,7 @@ import {
   recurringUpdatePayload,
   installmentEditPayload,
   savingsGoalPayload,
+  targetPayload,
   type AccountForm,
   type BillingForm,
   type InstallmentEditForm,
@@ -20,10 +21,12 @@ import {
   type RecurringEditForm,
   type RecurringForm,
   type SavingsGoalForm,
+  type TargetForm,
 } from './forms';
-import { money, parseMoney, signedMoney, splitByMonth } from './format';
+import { formatMonth, money, parseMoney, signedMoney, splitByMonth } from './format';
 import { signedAmount } from './labels';
-import type { Account, BillingRegistration, Installment, Projection, Receivable, RecurringTransaction, TransactionInstallment, User } from './types';
+import { targetProgress, type TargetProgress } from './targets';
+import type { Account, BillingRegistration, Installment, Projection, Receivable, RecurringTransaction, Target, TransactionInstallment, User } from './types';
 
 // ---------- cache ----------
 
@@ -373,7 +376,70 @@ function balanceOf(reg: BillingRegistration) {
   return { total: reg.total, delta: reg.delta, createdAt: reg.createdAt, accounts, bills, accountsTotal: sum(accounts), billsTotal: sum(bills) };
 }
 
-/** meta de guardar por mês (perfil): só um número para a tela inicial */
+/** metas: progresso pelo último registro de saldos e previsão pelo crescimento por mês */
+export function useTargets() {
+  const api = useApi();
+  const notice = useNotice();
+  const query = useQuery('targets', async () => {
+    const [targets, projection, accounts] = await Promise.all([api.targets.list(), api.billings.projection(1), api.accounts.list()]);
+    return { targets, projection, accounts };
+  });
+
+  const last = query.data?.projection.billingRegistrations.at(-1) ?? null;
+  const growth = query.data?.projection.monthlyGrowth ?? 0;
+  const accounts = query.data?.accounts ?? [];
+  const now = new Date();
+
+  return {
+    ...query,
+    ...notice,
+    growth,
+    hasBalance: last !== null,
+    /** só contas de saldo podem ser base de uma meta */
+    accounts: accounts.filter((a) => a.kind === 'asset'),
+    items: (query.data?.targets ?? []).map((target) => {
+      const progress = targetProgress(target, last, growth, now);
+      return {
+        target,
+        base: target.accountId === null ? 'Saldo total' : (accounts.find((a) => a.id === target.accountId)?.name ?? 'Conta removida'),
+        ...progress,
+        message: targetMessage(progress),
+      };
+    }),
+    async save(form: TargetForm, id?: number) {
+      const body = targetPayload(form);
+      const t = id ? await api.targets.update(id, body) : await api.targets.create(body);
+      notice.ok(`Meta "${t.name}" ${id ? 'atualizada' : 'criada'}.`);
+      await query.reload();
+    },
+    async remove(t: Target) {
+      try {
+        await api.targets.remove(t.id);
+        notice.ok(`Meta "${t.name}" apagada.`);
+        await query.reload();
+      } catch (err) {
+        notice.fail(err);
+      }
+    },
+  };
+}
+
+function targetMessage(p: TargetProgress): string {
+  switch (p.status) {
+    case 'done':
+      return 'Concluída.';
+    case 'expired':
+      return 'O prazo passou.';
+    case 'noForecast':
+      return 'Sem previsão: o crescimento por mês não é positivo.';
+    case 'onTime':
+      return `No ritmo atual chega em ${formatMonth(p.eta!)}, dentro do prazo.`;
+    case 'late':
+      return `No ritmo atual só chega em ${formatMonth(p.eta!)}, depois do prazo.`;
+  }
+}
+
+/** reserva mensal (perfil): quanto guardar por mês, só um número para a tela inicial */
 export function useSavingsGoal() {
   const api = useApi();
   const notice = useNotice();
@@ -384,12 +450,12 @@ export function useSavingsGoal() {
     ...notice,
     async save(form: SavingsGoalForm) {
       await api.savingsGoal.save(savingsGoalPayload(form));
-      notice.ok('Meta salva. Ela aparece na tela inicial, junto da projeção.');
+      notice.ok('Reserva salva. Ela aparece na tela inicial, junto da projeção.');
       await query.reload();
     },
     async remove() {
       await api.savingsGoal.save({ percent: null, amount: null });
-      notice.ok('Meta removida.');
+      notice.ok('Reserva removida.');
       await query.reload();
     },
   };
