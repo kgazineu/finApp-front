@@ -58,6 +58,25 @@ const paths = {
   ),
   close: <path d="M18 6L6 18M6 6l12 12" />,
   'chevron-down': <path d="M6 9l6 6 6-6" />,
+  'chevron-right': <path d="M9 6l6 6-6 6" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4M12 8h.01" />
+    </>
+  ),
+  alert: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4M12 16h.01" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </>
+  ),
   check: <path d="M20 6L9 17l-5-5" />,
   'log-out': (
     <>

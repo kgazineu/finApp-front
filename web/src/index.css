@@ -6,10 +6,19 @@
   /* bottom sheet (Modal no celular) sobe da borda; no tablet/desktop o diálogo aparece no centro */
   --animate-sheet-up: sheet-up 0.22s cubic-bezier(0.32, 0.72, 0, 1);
   --animate-fade-in: fade-in 0.18s ease-out;
+  --animate-sheet-down: sheet-down 0.22s cubic-bezier(0.32, 0.72, 0, 1);
 
   @keyframes sheet-up {
     from {
       transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes sheet-down {
+    from {
+      transform: translateY(-120%);
     }
     to {
       transform: translateY(0);
@@ -43,6 +52,12 @@ label,
 input,
 [role='button'] {
   touch-action: manipulation;
+}
+
+/* seletor de data do iOS: texto alinhado à esquerda como os outros campos */
+input[type='date']::-webkit-date-and-time-value,
+input[type='month']::-webkit-date-and-time-value {
+  text-align: left;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,7 +1,7 @@
 // Estado dos formulários (sempre texto, igual em web e mobile) e conversão para o corpo da API.
 // As funções *Payload validam e lançam Error com a mensagem para o usuário.
 
-import { centsToInput, digits, endOfThisMonth, formatDate, formatMonth, parseDate, parseMoney, parseMonth, thisMonth } from './format';
+import { centsToInput, digits, endOfThisMonth, formatDate, formatMonth, parseDate, parseMoney, parseMonth, today } from './format';
 import type {
   Account,
   AccountInput,
@@ -10,9 +10,7 @@ import type {
   BillingRegistration,
   Installment,
   InstallmentUpdateInput,
-  ReceivableAmountMode,
   ReceivableCreateInput,
-  ReceivableKind,
   RecurringCreateInput,
   RecurringTransaction,
   RecurringUpdateInput,
@@ -84,38 +82,52 @@ export function savingsGoalPayload(f: SavingsGoalForm): SavingsGoal {
 
 // ---------- transação planejada ----------
 
+/** uma vez (variável, 1 vez) · todo mês (fixa, sem fim) · parcelado (variável, N vezes) */
+export type RecurringFrequency = 'once' | 'monthly' | 'installments';
+
 export type RecurringForm = {
   description: string;
   kind: TransactionKind;
-  isFixed: boolean;
+  frequency: RecurringFrequency;
   amount: string;
-  startMonth: string; // MM/AAAA
-  intervalMonths: string;
+  /** DD/MM/AAAA: dele saem o mês de início e o dia do vencimento */
+  firstDueDate: string;
+  /** só no parcelado */
   installments: string;
-  dayOfMonth: string;
+  /** mais opções: vazio = todo mês */
+  intervalMonths: string;
+  /** mais opções: sem dia certo, vence no último dia do mês */
+  noDay: boolean;
 };
 
 export const emptyRecurringForm = (): RecurringForm => ({
   description: '',
   kind: 'expense',
-  isFixed: false,
+  frequency: 'once',
   amount: '',
-  startMonth: thisMonth(),
-  intervalMonths: '',
+  firstDueDate: today(),
   installments: '',
-  dayOfMonth: '',
+  intervalMonths: '',
+  noDay: false,
 });
 
 export function recurringPayload(f: RecurringForm): RecurringCreateInput {
+  const date = parseDate(f.firstDueDate) ?? fail('Informe a data do vencimento');
+  const installments =
+    f.frequency === 'once'
+      ? 1
+      : f.frequency === 'installments'
+        ? (optionalInt(f.installments, 'O número de parcelas', 2, 600) ?? fail('Informe em quantas parcelas'))
+        : undefined;
   return {
     description: required(f.description, 'a descrição'),
     kind: f.kind,
-    isFixed: f.isFixed,
+    isFixed: f.frequency === 'monthly',
     amount: positiveMoney(f.amount),
-    startMonth: parseMonth(f.startMonth) ?? fail('Mês de início deve estar no formato MM/AAAA'),
-    intervalMonths: optionalInt(f.intervalMonths, 'O intervalo de meses', 1, 120),
-    installments: optionalInt(f.installments, 'A quantidade de vezes', 1, 600),
-    dayOfMonth: optionalInt(f.dayOfMonth, 'O dia do mês', 1, 31),
+    startMonth: date.slice(0, 7),
+    intervalMonths: f.frequency === 'once' ? undefined : optionalInt(f.intervalMonths, 'O intervalo de meses', 1, 120),
+    installments,
+    dayOfMonth: f.noDay ? undefined : Number(date.slice(8, 10)),
   };
 }
 
@@ -141,39 +153,42 @@ export function recurringUpdatePayload(f: RecurringEditForm): RecurringUpdateInp
 // ---------- valor a receber ----------
 
 export type ReceivableForm = {
-  kind: ReceivableKind;
   debtor: string;
   description: string;
-  amountMode: ReceivableAmountMode;
   amount: string;
-  interestRate: string;
+  /** vazio = 1 */
   installments: string;
   firstDueDate: string; // DD/MM/AAAA
+  /** mais opções */
+  interestRate: string;
+  /** mais opções: o valor informado é o de cada parcela (ex.: assinatura dividida) */
+  perInstallment: boolean;
 };
 
 export const emptyReceivableForm = (): ReceivableForm => ({
-  kind: 'loan',
   debtor: '',
   description: '',
-  amountMode: 'total',
   amount: '',
-  interestRate: '',
   installments: '',
   firstDueDate: endOfThisMonth(),
+  interestRate: '',
+  perInstallment: false,
 });
 
+/** o tipo sai do resto: uma parcela sem juros é conta dividida, o resto é empréstimo */
 export function receivablePayload(f: ReceivableForm): ReceivableCreateInput {
-  const split = f.kind === 'split'; // conta dividida: sem juros, uma parcela
-  const perInstallment = !split && f.amountMode === 'installment'; // valor fixo por parcela: sem juros
+  const installments = optionalInt(f.installments, 'As parcelas', 1, 120) ?? 1;
+  const perInstallment = f.perInstallment && installments > 1; // valor fixo por parcela: sem juros
+  const interestRate = perInstallment ? 0 : (optionalInt(f.interestRate, 'Os juros', 0, 1000) ?? 0);
   return {
-    kind: f.kind,
+    kind: installments > 1 || interestRate > 0 ? 'loan' : 'split',
     debtor: required(f.debtor, 'quem deve'),
     description: required(f.description, 'a descrição'),
     amount: positiveMoney(f.amount, perInstallment ? 'o valor de cada parcela' : 'o valor'),
     amountMode: perInstallment ? 'installment' : 'total',
-    interestRate: split || perInstallment ? 0 : (optionalInt(f.interestRate, 'Os juros', 0, 1000) ?? 0),
-    installments: split ? 1 : (optionalInt(f.installments, 'As parcelas', 1, 120) ?? 1),
-    firstDueDate: parseDate(f.firstDueDate) ?? fail('Vencimento deve ser uma data válida no formato DD/MM/AAAA'),
+    interestRate,
+    installments,
+    firstDueDate: parseDate(f.firstDueDate) ?? fail('Informe a data do vencimento'),
   };
 }
 

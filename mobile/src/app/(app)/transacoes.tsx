@@ -2,6 +2,7 @@ import {
   cx,
   digits,
   emptyRecurringForm,
+  maskDate,
   maskMoney,
   maskMonth,
   money,
@@ -14,6 +15,7 @@ import {
   useRecurring,
   type RecurringEditForm,
   type RecurringForm,
+  type RecurringFrequency,
   type RecurringTransaction,
   type TransactionKind,
 } from '@finapp/shared';
@@ -24,6 +26,12 @@ import { Badge, Button, Card, Checkbox, Empty, Field, FormError, Loading, Modal,
 const kindOptions: { value: TransactionKind; label: string }[] = [
   { value: 'expense', label: 'Despesa' },
   { value: 'income', label: 'Entrada' },
+];
+
+const frequencyOptions: { value: RecurringFrequency; label: string }[] = [
+  { value: 'once', label: 'Uma vez' },
+  { value: 'monthly', label: 'Todo mês' },
+  { value: 'installments', label: 'Parcelado' },
 ];
 
 export default function Transactions() {
@@ -91,21 +99,14 @@ export default function Transactions() {
           <>
             <Field label="Descrição" value={creating.description} onChange={(description) => setCreating({ ...creating, description })} />
             <Segmented label="Tipo" value={creating.kind} options={kindOptions} onChange={(kind) => setCreating({ ...creating, kind })} />
-            <Checkbox
-              checked={creating.isFixed}
-              onChange={(isFixed) => setCreating({ ...creating, isFixed })}
-              label="Fixa (repete sem data para acabar, como salário e aluguel)"
-            />
+            <Segmented label="Repete?" value={creating.frequency} options={frequencyOptions} onChange={(frequency) => setCreating({ ...creating, frequency })} />
             <Field label="Valor" prefix="R$" inputMode="numeric" value={creating.amount} mask={maskMoney} onChange={(amount) => setCreating({ ...creating, amount })} />
             <View className="flex-row gap-3">
-              <Field className="flex-1" label="Começa em" placeholder="MM/AAAA" inputMode="numeric" value={creating.startMonth} mask={maskMonth} onChange={(startMonth) => setCreating({ ...creating, startMonth })} />
-              <Field className="flex-1" label="Dia do mês" placeholder="sem dia certo" inputMode="numeric" value={creating.dayOfMonth} mask={(v) => digits(v).slice(0, 2)} onChange={(dayOfMonth) => setCreating({ ...creating, dayOfMonth })} />
+              <Field className="flex-1" label="Vencimento" placeholder="DD/MM/AAAA" inputMode="numeric" value={creating.firstDueDate} mask={maskDate} onChange={(firstDueDate) => setCreating({ ...creating, firstDueDate })} />
+              {creating.frequency === 'installments' && (
+                <Field className="flex-1" label="Parcelas" inputMode="numeric" value={creating.installments} mask={(v) => digits(v).slice(0, 3)} onChange={(installments) => setCreating({ ...creating, installments })} />
+              )}
             </View>
-            <View className="flex-row gap-3">
-              <Field className="flex-1" label="A cada quantos meses" placeholder="1" inputMode="numeric" value={creating.intervalMonths} mask={(v) => digits(v).slice(0, 3)} onChange={(intervalMonths) => setCreating({ ...creating, intervalMonths })} />
-              <Field className="flex-1" label="Quantas vezes" inputMode="numeric" value={creating.installments} mask={(v) => digits(v).slice(0, 3)} onChange={(installments) => setCreating({ ...creating, installments })} />
-            </View>
-            <Text className={ui.small}>"Quantas vezes" vazio: fixa repete sem fim, variável acontece uma vez só. Pode começar no passado: as parcelas já vencidas aparecem como atrasadas e você marca as que já pagou ou recebeu.</Text>
             <FormError error={create.error} />
             <Button busy={create.busy} onPress={() => create.run()}>
               Cadastrar

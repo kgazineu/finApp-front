@@ -2,29 +2,59 @@ import {
   cx,
   digits,
   emptyRecurringForm,
+  frequencyOf,
   maskMoney,
-  maskMonth,
   money,
+  parseDate,
+  recurringEnded,
   recurringToEditForm,
   scheduleText,
   signedAmount,
-  transactionKindLabel,
+  signedMoney,
+  today,
   ui,
   useAction,
   useRecurring,
   type RecurringEditForm,
   type RecurringForm,
+  type RecurringFrequency,
   type RecurringTransaction,
   type TransactionKind,
 } from '@finapp/shared';
 import { useState, type FormEvent } from 'react';
-import { Actions, Badge, Button, Card, Checkbox, Empty, Field, FormError, ItemActions, Loading, Modal, NoticeBar, Row, Segmented, confirmAction } from '../components';
+import {
+  Actions,
+  Button,
+  Card,
+  Checkbox,
+  DateField,
+  Disclosure,
+  Empty,
+  Field,
+  FormError,
+  ListButton,
+  Loading,
+  Modal,
+  MonthField,
+  MoreOptions,
+  NoticeBar,
+  Segmented,
+  confirmAction,
+} from '../components';
 import { PageHeader } from '../layouts';
 
 const kindOptions: { value: TransactionKind; label: string }[] = [
   { value: 'expense', label: 'Despesa' },
   { value: 'income', label: 'Entrada' },
 ];
+
+const frequencyOptions: { value: RecurringFrequency; label: string }[] = [
+  { value: 'once', label: 'Uma vez' },
+  { value: 'monthly', label: 'Todo mês' },
+  { value: 'installments', label: 'Parcelado' },
+];
+
+const dateLabel: Record<RecurringFrequency, string> = { once: 'Data', monthly: 'Primeiro vencimento', installments: 'Vencimento da 1ª parcela' };
 
 export function TransactionsPage() {
   const t = useRecurring();
@@ -40,80 +70,117 @@ export function TransactionsPage() {
   });
 
   async function remove(item: RecurringTransaction) {
-    if (await confirmAction(`Remover "${item.description}"? Se já tiver parcela paga, ela fica arquivada.`)) await t.remove(item);
+    if (!(await confirmAction(`Excluir "${item.description}"? As parcelas já pagas ficam guardadas no histórico.`))) return;
+    setEditing(null);
+    await t.remove(item);
   }
 
   const submit = (run: () => Promise<boolean>) => (e: FormEvent) => {
     e.preventDefault();
     void run();
   };
+  const set = (changes: Partial<RecurringForm>) => creating && setCreating({ ...creating, ...changes });
+  const setEdit = (changes: Partial<RecurringEditForm>) => editing && setEditing({ ...editing, form: { ...editing.form, ...changes } });
+  const open = (item: RecurringTransaction) => (update.clearError(), setEditing({ item, form: recurringToEditForm(item) }));
+
+  const items = t.data ?? [];
+  const active = items.filter((i) => !recurringEnded(i));
+  const monthly = active.filter((i) => i.isFixed);
+  const others = active.filter((i) => !i.isFixed);
+  const ended = items.filter((i) => recurringEnded(i));
+  // o que entra e sai todo mês (só as mensais; "a cada N meses" fica fora do resumo)
+  const perMonth = (kind: TransactionKind) => monthly.filter((i) => i.kind === kind && i.intervalMonths === 1).reduce((total, i) => total + i.amount, 0);
+  const firstDue = creating ? parseDate(creating.firstDueDate) : null;
+  const past = !!firstDue && firstDue < (parseDate(today()) ?? '');
 
   return (
     <>
       <PageHeader
         title="Transações"
-        description="Entradas e despesas planejadas: salário, aluguel, assinaturas, compras parceladas."
+        help="Tudo que você já sabe que vai entrar ou sair: salário, aluguel, assinaturas, compras parceladas. Elas entram na projeção da tela inicial, onde você marca o que já pagou ou recebeu."
         action={<Button onClick={() => (create.clearError(), setCreating(emptyRecurringForm()))}>+ Nova transação</Button>}
       />
       <NoticeBar notice={t.notice} onClose={t.clear} />
+      <FormError error={t.error} />
 
-      <Card title="Cadastradas">
-        {t.loading && !t.data ? (
+      {t.loading && !t.data ? (
+        <Card>
           <Loading />
-        ) : t.data?.length ? (
-          t.data.map((item) => (
-            <Row key={item.id}>
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <p className={ui.strong}>{item.description}</p>
-                <div className="flex flex-wrap gap-1">
-                  <Badge tone={item.kind}>{transactionKindLabel[item.kind]}</Badge>
-                  <Badge>{item.isFixed ? 'Fixa' : 'Variável'}</Badge>
-                </div>
-                <p className={ui.small}>{scheduleText(item)}</p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <p className={cx('text-sm font-semibold', ui.amount(signedAmount(item)))}>{money(signedAmount(item))}</p>
-                <ItemActions
-                  name={item.description}
-                  onEdit={() => (update.clearError(), setEditing({ item, form: recurringToEditForm(item) }))}
-                  onRemove={() => remove(item)}
-                />
-              </div>
-            </Row>
-          ))
-        ) : (
-          <Empty>Nenhuma transação cadastrada.</Empty>
-        )}
-        {t.error && <FormError error={t.error} />}
-      </Card>
+        </Card>
+      ) : !items.length ? (
+        <Card>
+          <Empty>Nenhuma transação ainda. Comece pelo salário e pelas contas fixas, como o aluguel.</Empty>
+        </Card>
+      ) : (
+        <>
+          <Card
+            title="Todo mês"
+            action={
+              monthly.length > 0 && (
+                <p className="text-right text-xs leading-tight font-semibold whitespace-nowrap">
+                  <span className="text-emerald-700">{signedMoney(perMonth('income'))}</span>
+                  <br />
+                  <span className="text-rose-700">{signedMoney(-perMonth('expense'))}</span>
+                </p>
+              )
+            }
+          >
+            {monthly.length ? <List items={monthly} onOpen={open} /> : <Empty>Nada que se repete todo mês.</Empty>}
+          </Card>
+          <Card title="Parceladas e avulsas">
+            {others.length ? <List items={others} onOpen={open} /> : <Empty>Nenhuma compra parcelada ou avulsa.</Empty>}
+          </Card>
+          {ended.length > 0 && (
+            <Disclosure title="Encerradas" summary={<span className={ui.small}>{ended.length}</span>}>
+              <List items={ended} onOpen={open} />
+            </Disclosure>
+          )}
+        </>
+      )}
 
       <Modal open={!!creating} title="Nova transação" onClose={() => setCreating(null)}>
         {creating && (
           <form onSubmit={submit(create.run)} className="flex flex-col gap-4">
-            <Field label="Descrição" value={creating.description} onChange={(description) => setCreating({ ...creating, description })} autoFocus />
-            <Segmented label="Tipo" value={creating.kind} options={kindOptions} onChange={(kind) => setCreating({ ...creating, kind })} />
-            <Checkbox
-              checked={creating.isFixed}
-              onChange={(isFixed) => setCreating({ ...creating, isFixed })}
-              label="Fixa (repete sem data para acabar, como salário e aluguel)"
+            <Segmented value={creating.kind} options={kindOptions} onChange={(kind) => set({ kind })} />
+            <Field label="Descrição" placeholder="Aluguel, salário, celular…" value={creating.description} onChange={(description) => set({ description })} autoFocus />
+            <Segmented label="Repete?" value={creating.frequency} options={frequencyOptions} onChange={(frequency) => set({ frequency })} />
+            <div className={cx('grid items-end gap-3', creating.frequency === 'installments' && 'grid-cols-2')}>
+              <Field
+                label={creating.frequency === 'installments' ? 'Valor da parcela' : 'Valor'}
+                prefix="R$"
+                inputMode="numeric"
+                value={creating.amount}
+                mask={maskMoney}
+                onChange={(amount) => set({ amount })}
+              />
+              {creating.frequency === 'installments' && (
+                <Field label="Parcelas" placeholder="10" inputMode="numeric" value={creating.installments} mask={(v) => digits(v).slice(0, 3)} onChange={(installments) => set({ installments })} />
+              )}
+            </div>
+            <DateField
+              label={dateLabel[creating.frequency]}
+              value={creating.firstDueDate}
+              onChange={(firstDueDate) => set({ firstDueDate })}
+              hint={past ? 'No passado: o que já venceu aparece como atrasado, e você marca o que já pagou.' : undefined}
             />
-            <Field label="Valor" prefix="R$" inputMode="numeric" value={creating.amount} mask={maskMoney} onChange={(amount) => setCreating({ ...creating, amount })} />
-            <div className="grid grid-cols-2 items-end gap-3">
-              <Field className="flex-1" label="Começa em" placeholder="MM/AAAA" inputMode="numeric" value={creating.startMonth} mask={maskMonth} onChange={(startMonth) => setCreating({ ...creating, startMonth })} />
-              <Field className="flex-1" label="Dia do mês" placeholder="sem dia certo" inputMode="numeric" value={creating.dayOfMonth} mask={(v) => digits(v).slice(0, 2)} onChange={(dayOfMonth) => setCreating({ ...creating, dayOfMonth })} />
-            </div>
-            <div className="grid grid-cols-2 items-end gap-3">
-              <Field className="flex-1" label="A cada quantos meses" placeholder="1" inputMode="numeric" value={creating.intervalMonths} mask={(v) => digits(v).slice(0, 3)} onChange={(intervalMonths) => setCreating({ ...creating, intervalMonths })} />
-              <Field className="flex-1" label="Quantas vezes" inputMode="numeric" value={creating.installments} mask={(v) => digits(v).slice(0, 3)} onChange={(installments) => setCreating({ ...creating, installments })} />
-            </div>
-            <p className={ui.small}>"Quantas vezes" vazio: fixa repete sem fim, variável acontece uma vez só. Pode começar no passado: as parcelas já vencidas aparecem como atrasadas e você marca as que já pagou ou recebeu.</p>
+            <MoreOptions>
+              <Checkbox checked={creating.noDay} onChange={(noDay) => set({ noDay })} label="Sem dia certo (vence no fim do mês)" />
+              {creating.frequency !== 'once' && (
+                <Field
+                  label="Repetir a cada quantos meses"
+                  placeholder="1"
+                  inputMode="numeric"
+                  value={creating.intervalMonths}
+                  mask={(v) => digits(v).slice(0, 3)}
+                  onChange={(intervalMonths) => set({ intervalMonths })}
+                  hint="Ex.: 12 para algo anual, como o IPVA."
+                />
+              )}
+            </MoreOptions>
             <FormError error={create.error} />
             <Actions>
-              <Button variant="secondary" onClick={() => setCreating(null)}>
-                Cancelar
-              </Button>
               <Button type="submit" busy={create.busy}>
-                Cadastrar
+                Salvar
               </Button>
             </Actions>
           </form>
@@ -123,19 +190,27 @@ export function TransactionsPage() {
       <Modal open={!!editing} title="Editar transação" onClose={() => setEditing(null)}>
         {editing && (
           <form onSubmit={submit(update.run)} className="flex flex-col gap-4">
-            <Field label="Descrição" value={editing.form.description} onChange={(description) => setEditing({ ...editing, form: { ...editing.form, description } })} />
-            <Field label="Valor" prefix="R$" inputMode="numeric" value={editing.form.amount} mask={maskMoney} onChange={(amount) => setEditing({ ...editing, form: { ...editing.form, amount } })} />
+            <p className={ui.small}>{scheduleText(editing.item)}</p>
+            <Field label="Descrição" value={editing.form.description} onChange={(description) => setEdit({ description })} />
+            <Field label="Valor" prefix="R$" inputMode="numeric" value={editing.form.amount} mask={maskMoney} onChange={(amount) => setEdit({ amount })} />
             <div className="grid grid-cols-2 items-end gap-3">
-              <Field className="flex-1" label="Dia do mês" placeholder="sem dia certo" inputMode="numeric" value={editing.form.dayOfMonth} mask={(v) => digits(v).slice(0, 2)} onChange={(dayOfMonth) => setEditing({ ...editing, form: { ...editing.form, dayOfMonth } })} />
-              <Field className="flex-1" label="Termina em" placeholder="sem fim" inputMode="numeric" value={editing.form.endMonth} mask={maskMonth} onChange={(endMonth) => setEditing({ ...editing, form: { ...editing.form, endMonth } })} />
+              <Field
+                label="Dia do vencimento"
+                placeholder="fim do mês"
+                inputMode="numeric"
+                value={editing.form.dayOfMonth}
+                mask={(v) => digits(v).slice(0, 2)}
+                onChange={(dayOfMonth) => setEdit({ dayOfMonth })}
+              />
+              {frequencyOf(editing.item) !== 'once' && (
+                <MonthField label="Termina em" placeholder="Sem fim" value={editing.form.endMonth} onChange={(endMonth) => setEdit({ endMonth })} />
+              )}
             </div>
-            <p className={ui.small}>
-              Vazio = sem dia certo / sem fim. Parcelas já pagas não mudam. Tipo, fixa, início e intervalo não podem ser editados: para isso, remova e cadastre de novo.
-            </p>
+            <p className={ui.small}>Parcelas já pagas não mudam. Para trocar o tipo ou a repetição, exclua e cadastre de novo.</p>
             <FormError error={update.error} />
             <Actions>
-              <Button variant="secondary" onClick={() => setEditing(null)}>
-                Cancelar
+              <Button variant="ghostDanger" onClick={() => remove(editing.item)}>
+                Excluir
               </Button>
               <Button type="submit" busy={update.busy}>
                 Salvar
@@ -145,5 +220,21 @@ export function TransactionsPage() {
         )}
       </Modal>
     </>
+  );
+}
+
+function List({ items, onOpen }: { items: RecurringTransaction[]; onOpen(item: RecurringTransaction): void }) {
+  return (
+    <div className="flex flex-col">
+      {items.map((item) => (
+        <ListButton key={item.id} onClick={() => onOpen(item)}>
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <p className={cx(ui.strong, 'truncate')}>{item.description}</p>
+            <p className={ui.small}>{scheduleText(item)}</p>
+          </div>
+          <p className={cx('text-sm font-semibold whitespace-nowrap', ui.amount(signedAmount(item)))}>{money(signedAmount(item))}</p>
+        </ListButton>
+      ))}
+    </div>
   );
 }

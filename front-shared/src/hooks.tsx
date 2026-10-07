@@ -204,14 +204,15 @@ export function useAction<A extends unknown[]>(action: (...args: A) => Promise<u
   return { run, busy, error, clearError: () => setError(null) };
 }
 
-export type Notice = { text: string; error: boolean } | null;
+/** undo: a tela mostra "Desfazer" no aviso */
+export type Notice = { text: string; error: boolean; undo?: () => void } | null;
 
 /** aviso de topo de tela (sucesso ou erro) */
 export function useNotice() {
   const [notice, setNotice] = useState<Notice>(null);
   return {
     notice,
-    ok: (text: string) => setNotice({ text, error: false }),
+    ok: (text: string, undo?: () => void) => setNotice({ text, error: false, undo }),
     fail: (err: unknown) => setNotice({ text: errorMessage(err), error: true }),
     clear: () => setNotice(null),
   };
@@ -299,10 +300,11 @@ export function useProjection() {
   const transactions = splitByMonth(projection?.pendingTransactions ?? []);
   const receivables = splitByMonth(projection?.pendingReceivables ?? []);
 
-  /** marca/desmarca parcela; a projeção é recalculada em seguida */
-  async function setPaid(toggle: (paid: boolean) => Promise<unknown>, paid: boolean) {
+  /** marca/desmarca parcela; a projeção é recalculada em seguida. Com message, avisa e oferece desfazer */
+  async function setPaid(toggle: (paid: boolean) => Promise<unknown>, paid: boolean, message?: string) {
     try {
       await toggle(paid);
+      if (message) notice.ok(message, () => void setPaid(toggle, !paid));
       await query.reload();
     } catch (err) {
       notice.fail(err);
@@ -351,15 +353,17 @@ export function useProjection() {
       receivables: receivables.upcoming,
     },
     paid: query.data?.paid ?? [],
-    payTransaction: (id: number, paid: boolean) => setPaid((p) => api.recurring.setPaid(id, p), paid),
-    payReceivable: (id: number, paid: boolean) => setPaid((p) => api.receivables.setPaid(id, p), paid),
+    /** com label, avisa "marcada como paga" com desfazer */
+    payTransaction: (id: number, paid: boolean, label?: string) =>
+      setPaid((p) => api.recurring.setPaid(id, p), paid, label && `"${label}" marcada como ${paid ? 'paga' : 'pendente'}.`),
+    payReceivable: (id: number, paid: boolean, label?: string) =>
+      setPaid((p) => api.receivables.setPaid(id, p), paid, label && `"${label}" marcada como ${paid ? 'recebida' : 'pendente'}.`),
     setPaid,
     /** contas ativas para o formulário de novo registro */
     loadAccounts: () => api.accounts.list(),
     async createBilling(accounts: Account[], form: BillingForm) {
       const reg = await api.billings.create(billingPayload(accounts, form));
-      const delta = reg.delta === null ? ' (primeiro registro, ainda sem delta)' : `, delta ${signedMoney(reg.delta)}`;
-      notice.ok(`Registro #${reg.id} criado: total ${money(reg.total)}${delta}.`);
+      notice.ok(reg.delta === null ? `Saldos salvos: ${money(reg.total)}.` : `Saldos atualizados: ${signedMoney(reg.delta)} desde a última vez.`);
       await query.reload();
     },
   };
@@ -450,7 +454,7 @@ export function useSavingsGoal() {
     ...notice,
     async save(form: SavingsGoalForm) {
       await api.savingsGoal.save(savingsGoalPayload(form));
-      notice.ok('Reserva salva. Ela aparece na tela inicial, junto da projeção.');
+      notice.ok('Reserva salva.');
       await query.reload();
     },
     async remove() {
@@ -461,14 +465,24 @@ export function useSavingsGoal() {
   };
 }
 
+/** contas e o saldo de cada uma no último registro */
 export function useAccounts() {
   const api = useApi();
   const notice = useNotice();
-  const query = useQuery('accounts', () => api.accounts.list());
+  const query = useQuery('accounts', async () => {
+    const [accounts, projection] = await Promise.all([api.accounts.list(), api.billings.projection(1)]);
+    return { accounts, last: projection.billingRegistrations.at(-1) ?? null };
+  });
+  const last = query.data?.last ?? null;
 
   return {
     ...query,
     ...notice,
+    data: query.data?.accounts ?? null,
+    /** último registro de saldos (null antes do primeiro) */
+    last,
+    /** saldo da conta no último registro; null se ela ainda não aparece em nenhum */
+    balanceOf: (accountId: number) => last?.entries.find((e) => e.accountId === accountId)?.amount ?? null,
     async save(form: AccountForm, id?: number) {
       const body = accountPayload(form);
       const a = id ? await api.accounts.update(id, body) : await api.accounts.create(body);
@@ -479,9 +493,7 @@ export function useAccounts() {
       try {
         const res = await api.accounts.remove(a.id);
         notice.ok(
-          res.message === 'conta arquivada'
-            ? `"${a.name}" foi arquivada: ela já aparece em registros de saldo, então o histórico ficou guardado.`
-            : `"${a.name}" foi apagada.`,
+          res.message === 'conta arquivada' ? `"${a.name}" arquivada: o histórico ficou guardado.` : `"${a.name}" apagada.`,
         );
         await query.reload();
       } catch (err) {
@@ -513,9 +525,7 @@ export function useRecurring() {
       try {
         const res = await api.recurring.remove(t.id);
         notice.ok(
-          res.archived
-            ? `"${t.description}" arquivada: as parcelas já pagas ficaram guardadas.`
-            : `"${t.description}" apagada.`,
+          res.archived ? `"${t.description}" arquivada: as parcelas pagas ficaram guardadas.` : `"${t.description}" apagada.`,
         );
         await query.reload();
       } catch (err) {
@@ -547,9 +557,7 @@ export function useReceivables() {
       try {
         const res = await api.receivables.remove(r.id);
         notice.ok(
-          res.archived
-            ? `"${r.description}" arquivado: as parcelas já recebidas ficaram guardadas.`
-            : `"${r.description}" apagado.`,
+          res.archived ? `"${r.description}" arquivado: as parcelas recebidas ficaram guardadas.` : `"${r.description}" apagado.`,
         );
         await query.reload();
       } catch (err) {
@@ -568,9 +576,7 @@ export function useReceivables() {
       const body = installmentEditPayload(form);
       await api.receivables.updateInstallment(installment.id, body);
       notice.ok(
-        body.applyToFollowing
-          ? `Parcela ${installment.number} e as próximas em aberto atualizadas.`
-          : `Parcela ${installment.number} atualizada.`,
+        body.applyToFollowing ? `Parcela ${installment.number} e as seguintes atualizadas.` : `Parcela ${installment.number} atualizada.`,
       );
       await query.reload();
     },

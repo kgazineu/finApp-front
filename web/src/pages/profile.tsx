@@ -15,7 +15,7 @@ import {
   type SavingsGoalForm,
 } from '@finapp/shared';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Actions, Button, Card, Field, FormError, Modal, NoticeBar, Segmented, confirmAction } from '../components';
+import { Actions, Button, Card, Disclosure, Field, FormError, Modal, NoticeBar, Segmented, confirmAction } from '../components';
 import { Icon } from '../icons';
 import { PageHeader } from '../layouts';
 
@@ -70,9 +70,9 @@ export function ProfilePage() {
     } catch (err) {
       if (!(err instanceof ApiError && err.status === 409)) throw err;
       const replace = await confirmAction(
-        'Você já tem dados cadastrados. Importar este arquivo vai APAGAR tudo o que você tem hoje (contas, registros de saldo, ' +
-          'transações, valores a receber, lançamentos e metas) e colocar o conteúdo do arquivo no lugar. Não dá para desfazer: ' +
-          'se quiser guardar o que tem agora, cancele e use "Exportar dados" antes.\n\nSubstituir seus dados pelos do arquivo?',
+        'Importar vai APAGAR tudo o que você tem hoje e colocar o conteúdo do arquivo no lugar. Não dá para desfazer: ' +
+          'para guardar o que tem agora, cancele e exporte antes.',
+        'Substituir meus dados',
       );
       if (replace) dataNotice.ok((await api.data.import(content, true)).message);
     }
@@ -122,25 +122,6 @@ export function ProfilePage() {
 
       <SavingsGoalCard />
 
-      <Card title="Seus dados">
-        <p className={ui.muted}>
-          Baixe um arquivo com tudo o que você cadastrou: contas, registros de saldo, transações, valores a receber, lançamentos e
-          metas, com o histórico de pagamentos. "Importar dados" grava o conteúdo de um arquivo desses nesta conta: se ela já tiver
-          dados, tudo o que existe é substituído pelo arquivo (você confirma antes).
-        </p>
-        <NoticeBar notice={dataNotice.notice} onClose={dataNotice.clear} />
-        <FormError error={exportData.error ?? importData.error} />
-        <Actions start>
-          <Button busy={exportData.busy} onClick={() => (importData.clearError(), exportData.run())}>
-            Exportar dados
-          </Button>
-          <Button variant="secondary" busy={importData.busy} onClick={() => (exportData.clearError(), fileInput.current?.click())}>
-            Importar dados
-          </Button>
-        </Actions>
-        <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={onFile} />
-      </Card>
-
       <Card title="Segurança">
         <Actions start>
           <Button variant="secondary" onClick={() => (setCode(''), setPassword(''), setConfirmation(''), setChanging('send'))}>
@@ -153,10 +134,25 @@ export function ProfilePage() {
         </Actions>
       </Card>
 
+      <Disclosure title="Backup dos dados">
+        <p className={ui.muted}>Baixe um arquivo com tudo o que você cadastrou, ou traga de volta um arquivo desses.</p>
+        <NoticeBar notice={dataNotice.notice} onClose={dataNotice.clear} />
+        <FormError error={exportData.error ?? importData.error} />
+        <Actions start>
+          <Button busy={exportData.busy} onClick={() => (importData.clearError(), exportData.run())}>
+            Exportar dados
+          </Button>
+          <Button variant="secondary" busy={importData.busy} onClick={() => (exportData.clearError(), fileInput.current?.click())}>
+            Importar dados
+          </Button>
+        </Actions>
+        <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={onFile} />
+      </Disclosure>
+
       <Modal open={changing !== 'closed'} title="Alterar senha" onClose={() => setChanging('closed')}>
         {changing === 'send' ? (
           <div className="flex flex-col gap-4">
-            <p className={ui.muted}>Vamos enviar um código de 6 dígitos para {user.email} para confirmar que é você.</p>
+            <p className={ui.muted}>Vamos enviar um código de 6 dígitos para {user.email}.</p>
             <FormError error={send.error} />
             <Button busy={send.busy} onClick={() => send.run()}>
               Enviar código
@@ -164,7 +160,7 @@ export function ProfilePage() {
           </div>
         ) : (
           <form onSubmit={submit(change.run)} className="flex flex-col gap-4">
-            <p className={ui.muted}>Digite o código enviado para {user.email}. Depois de trocar, você vai precisar entrar de novo.</p>
+            <p className={ui.muted}>Digite o código enviado para {user.email}. Depois você entra de novo com a senha nova.</p>
             <Field
               label="Código"
               inputMode="numeric"
@@ -200,8 +196,7 @@ function SavingsGoalCard() {
   const hasGoal = goal.data?.percent != null || goal.data?.amount != null;
 
   return (
-    <Card title="Reserva mensal">
-      <p className={ui.muted}>Quanto você quer guardar todo mês. A tela inicial mostra a reserva e quanto sobra para gastar; a projeção não muda.</p>
+    <Card title="Reserva mensal" help="Quanto você quer guardar todo mês. A tela inicial mostra quanto sobra para gastar depois de guardar; a projeção não muda.">
       <NoticeBar notice={goal.notice} onClose={goal.clear} />
       <Segmented
         value={form.kind}
@@ -219,7 +214,7 @@ function SavingsGoalCard() {
           value={form.value}
           mask={(v) => digits(v).slice(0, 3)}
           onChange={(value) => setForm({ ...form, value })}
-          hint="O que sobra = o crescimento por mês: entradas fixas − despesas fixas."
+          hint="O que sobra = entradas fixas − despesas fixas."
         />
       ) : (
         <Field label="Quanto guardar por mês" prefix="R$" inputMode="numeric" value={form.value} mask={maskMoney} onChange={(value) => setForm({ ...form, value })} />

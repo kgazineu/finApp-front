@@ -16,24 +16,12 @@ import {
   type Installment,
   type InstallmentEditForm,
   type Receivable,
-  type ReceivableAmountMode,
   type ReceivableEditForm,
   type ReceivableForm,
-  type ReceivableKind,
 } from '@finapp/shared';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Badge, Button, Card, Checkbox, Empty, Field, FormError, Loading, Modal, NoticeBar, PageHeader, Screen, Segmented, confirmAction } from '@/components';
-
-const kindOptions: { value: ReceivableKind; label: string }[] = [
-  { value: 'loan', label: 'Empréstimo' },
-  { value: 'split', label: 'Conta dividida' },
-];
-
-const amountModeOptions: { value: ReceivableAmountMode; label: string }[] = [
-  { value: 'total', label: 'Valor total' },
-  { value: 'installment', label: 'Valor por parcela' },
-];
 
 export default function Receivables() {
   const r = useReceivables();
@@ -57,7 +45,6 @@ export default function Receivables() {
     if (await confirmAction(`Remover "${item.description}" (${item.debtor})? Se já tiver parcela recebida, ele fica arquivado.`)) await r.remove(item);
   }
 
-  const perInstallment = creating?.kind === 'loan' && creating.amountMode === 'installment';
   const setInstallmentForm = (changes: Partial<InstallmentEditForm>) =>
     editingInstallment && setEditingInstallment({ ...editingInstallment, form: { ...editingInstallment.form, ...changes } });
   const followingOpen = editingInstallment
@@ -84,7 +71,7 @@ export default function Receivables() {
                   <View className="flex-1 gap-1">
                     <Text className={overdue ? ui.strongOverdue : ui.strong}>{item.description}</Text>
                     <Text className={ui.small}>
-                      {item.debtor} · {receivableSummary(item)}
+                      {[item.debtor, receivableSummary(item)].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
                   <Text className={cx('text-sm font-semibold', ui.amount(receivableTotal(item)))}>{money(receivableTotal(item))}</Text>
@@ -134,45 +121,13 @@ export default function Receivables() {
       <Modal open={!!creating} title="Novo valor a receber" onClose={() => setCreating(null)}>
         {creating && (
           <>
-            <Segmented label="Tipo" value={creating.kind} options={kindOptions} onChange={(kind) => setCreating({ ...creating, kind })} />
             <Field label="Quem deve" value={creating.debtor} onChange={(debtor) => setCreating({ ...creating, debtor })} />
-            <Field label="Descrição" placeholder="pizza, bicicleta, assinatura..." value={creating.description} onChange={(description) => setCreating({ ...creating, description })} />
-            {creating.kind === 'loan' && (
-              <Segmented label="O valor informado é" value={creating.amountMode} options={amountModeOptions} onChange={(amountMode) => setCreating({ ...creating, amountMode })} />
-            )}
-            <Field
-              label={perInstallment ? 'Valor de cada parcela' : creating.kind === 'loan' ? 'Valor total (sem juros)' : 'Valor'}
-              prefix="R$"
-              inputMode="numeric"
-              value={creating.amount}
-              mask={maskMoney}
-              onChange={(amount) => setCreating({ ...creating, amount })}
-              hint={perInstallment ? 'Cada parcela vale exatamente isso (ex.: assinatura mensal).' : creating.kind === 'loan' ? 'Será dividido entre as parcelas.' : undefined}
-            />
-            {creating.kind === 'loan' && (
-              <View className="flex-row gap-3">
-                {!perInstallment && (
-                  <Field className="flex-1" label="Juros (%)" placeholder="0" inputMode="numeric" value={creating.interestRate} mask={(v) => digits(v).slice(0, 4)} onChange={(interestRate) => setCreating({ ...creating, interestRate })} />
-                )}
-                <Field className="flex-1" label="Parcelas" placeholder="1" inputMode="numeric" value={creating.installments} mask={(v) => digits(v).slice(0, 3)} onChange={(installments) => setCreating({ ...creating, installments })} />
-              </View>
-            )}
-            <Field
-              label="Data de início (1º vencimento)"
-              placeholder="DD/MM/AAAA"
-              inputMode="numeric"
-              value={creating.firstDueDate}
-              mask={maskDate}
-              onChange={(firstDueDate) => setCreating({ ...creating, firstDueDate })}
-              hint="Pode ser no passado: as parcelas já vencidas aparecem como atrasadas e você marca as que já recebeu."
-            />
-            <Text className={ui.small}>
-              {creating.kind === 'split'
-                ? 'Conta dividida: sem juros e em uma parcela.'
-                : perInstallment
-                  ? 'As parcelas vencem mês a mês a partir da data de início. Para juros, informe a parcela já com eles.'
-                  : 'Juros simples sobre o total; as parcelas vencem mês a mês a partir da data de início.'}
-            </Text>
+            <Field label="O que foi" placeholder="pizza, empréstimo, assinatura..." value={creating.description} onChange={(description) => setCreating({ ...creating, description })} />
+            <View className="flex-row gap-3">
+              <Field className="flex-1" label="Valor" prefix="R$" inputMode="numeric" value={creating.amount} mask={maskMoney} onChange={(amount) => setCreating({ ...creating, amount })} />
+              <Field className="flex-1" label="Parcelas" placeholder="1" inputMode="numeric" value={creating.installments} mask={(v) => digits(v).slice(0, 3)} onChange={(installments) => setCreating({ ...creating, installments })} />
+            </View>
+            <Field label="Vencimento" placeholder="DD/MM/AAAA" inputMode="numeric" value={creating.firstDueDate} mask={maskDate} onChange={(firstDueDate) => setCreating({ ...creating, firstDueDate })} />
             <FormError error={create.error} />
             <Button busy={create.busy} onPress={() => create.run()}>
               Cadastrar

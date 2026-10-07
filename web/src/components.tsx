@@ -2,8 +2,9 @@
 // props e os mesmos tokens visuais (ui em @finapp/shared); só muda o elemento desenhado.
 // O que é só da web (sombra, foco, animação, alvo de toque) fica aqui, para não mexer no mobile.
 
-import { cx, ui, type BadgeTone, type ButtonVariant, type Notice } from '@finapp/shared';
+import { cx, maskDate, maskMonth, parseDate, ui, type BadgeTone, type ButtonVariant, type Notice } from '@finapp/shared';
 import { Children, isValidElement, useEffect, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './icons';
 
 export function Button({
@@ -64,16 +65,6 @@ export function IconButton({
   );
 }
 
-/** editar e remover de um item das listas */
-export function ItemActions({ name, onEdit, onRemove }: { name: string; onEdit(): void; onRemove(): void }) {
-  return (
-    <div className="-mr-2 flex shrink-0">
-      <IconButton icon="pencil" label={`Editar ${name}`} onClick={onEdit} />
-      <IconButton icon="trash" tone="danger" label={`Remover ${name}`} onClick={onRemove} />
-    </div>
-  );
-}
-
 /** botões de um formulário: no celular dividem a largura (fáceis de alcançar), no resto ficam à direita */
 export function Actions({ children, start = false }: { children: ReactNode; start?: boolean }) {
   return <div className={cx('flex gap-2 pt-1 *:flex-1 sm:*:flex-none', start ? 'sm:justify-start' : 'sm:justify-end')}>{children}</div>;
@@ -115,6 +106,50 @@ export function Field({ label, value, onChange, mask, hint, prefix, className, i
             inputClassName,
           )}
         />
+      </span>
+      {hint && <span className={ui.small}>{hint}</span>}
+    </label>
+  );
+}
+
+const isoToBr = (iso: string) => iso.split('-').reverse().join('/');
+const brToIso = (br: string) => br.split('/').reverse().join('-');
+
+// iOS e Android abrem o seletor nativo; navegador sem suporte (ex.: "month" no Safari de desktop) cai na máscara de texto
+const supports = (type: string) => {
+  const input = document.createElement('input');
+  input.setAttribute('type', type);
+  return input.type === type;
+};
+const nativeDate = supports('date');
+const nativeMonth = supports('month');
+
+const pickerClass = cx(
+  ui.input,
+  'min-h-12 w-full appearance-none bg-white text-left transition outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/15',
+);
+
+/** data no formato do formulário (DD/MM/AAAA) com o seletor de data do aparelho */
+export function DateField({ label, value, onChange, hint, className }: { label: string; value: string; onChange(value: string): void; hint?: string; className?: string }) {
+  if (!nativeDate) return <Field label={label} value={value} onChange={onChange} mask={maskDate} placeholder="DD/MM/AAAA" inputMode="numeric" hint={hint} className={className} />;
+  return (
+    <label className={cx('flex flex-col gap-1.5', className)}>
+      <span className={ui.label}>{label}</span>
+      <input type="date" value={parseDate(value) ?? ''} onChange={(e) => onChange(e.target.value ? isoToBr(e.target.value) : '')} className={pickerClass} />
+      {hint && <span className={ui.small}>{hint}</span>}
+    </label>
+  );
+}
+
+/** mês no formato do formulário (MM/AAAA); vazio pode significar "sem fim" (placeholder) */
+export function MonthField({ label, value, onChange, hint, placeholder, className }: { label: string; value: string; onChange(value: string): void; hint?: string; placeholder?: string; className?: string }) {
+  if (!nativeMonth) return <Field label={label} value={value} onChange={onChange} mask={maskMonth} placeholder={placeholder ?? 'MM/AAAA'} inputMode="numeric" hint={hint} className={className} />;
+  return (
+    <label className={cx('flex flex-col gap-1.5', className)}>
+      <span className={ui.label}>{label}</span>
+      <span className="relative flex">
+        <input type="month" value={/^\d{2}\/\d{4}$/.test(value) ? brToIso(value) : ''} onChange={(e) => onChange(e.target.value ? isoToBr(e.target.value) : '')} className={pickerClass} />
+        {!value && placeholder && <span className={cx(ui.muted, 'pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400')}>{placeholder}</span>}
       </span>
       {hint && <span className={ui.small}>{hint}</span>}
     </label>
@@ -202,15 +237,33 @@ export function Checkbox({
   );
 }
 
-export function Card({ title, action, children, className }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
+export function Card({
+  title,
+  action,
+  help,
+  children,
+  className,
+}: {
+  title?: string;
+  action?: ReactNode;
+  /** explicação escondida atrás do ⓘ do título */
+  help?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  const [helpOpen, setHelpOpen] = useState(false);
   return (
     <section className={cx(ui.card, 'flex flex-col gap-3 shadow-sm shadow-slate-900/[0.03] sm:p-5', className)}>
       {(title || action) && (
         <div className={ui.row}>
-          {title && <h2 className={cx(ui.subtitle, 'tracking-tight')}>{title}</h2>}
+          <div className="flex min-w-0 items-center gap-1">
+            {title && <h2 className={cx(ui.subtitle, 'tracking-tight')}>{title}</h2>}
+            {help && title && <HelpButton open={helpOpen} onToggle={() => setHelpOpen(!helpOpen)} topic={title} />}
+          </div>
           {action}
         </div>
       )}
+      {helpOpen && <HelpText>{help}</HelpText>}
       {children}
     </section>
   );
@@ -220,21 +273,61 @@ export function Badge({ tone = 'neutral', children }: { tone?: BadgeTone; childr
   return <span className={cx(ui.badge, ui.badgeTone[tone], ui.badgeText[tone], 'whitespace-nowrap')}>{children}</span>;
 }
 
+/** pilha de avisos no topo da tela, acima de tudo (inclusive das folhas) */
+function toastRoot() {
+  let root = document.getElementById('toasts');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'toasts';
+    root.className =
+      'pointer-events-none fixed inset-x-0 top-0 z-[60] mx-auto flex max-w-md flex-col gap-2 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))]';
+    document.body.appendChild(root);
+  }
+  return root;
+}
+
+/**
+ * Aviso flutuante. Sucesso some sozinho em alguns segundos; erro fica até ser fechado.
+ * Com notice.undo aparece o botão "Desfazer".
+ */
 export function NoticeBar({ notice, onClose }: { notice: Notice; onClose(): void }) {
+  useEffect(() => {
+    if (!notice || notice.error) return;
+    const timer = setTimeout(onClose, notice.undo ? 6000 : 4000);
+    return () => clearTimeout(timer);
+  }, [notice, onClose]);
+
   if (!notice) return null;
   const tone = notice.error ? 'error' : 'ok';
-  return (
-    <div className={cx(ui.notice[tone], ui.row, 'animate-fade-in')} role={notice.error ? 'alert' : 'status'}>
-      <p className={ui.noticeText[tone]}>{notice.text}</p>
+  return createPortal(
+    <div
+      className={cx(
+        'pointer-events-auto flex animate-sheet-down items-center gap-3 rounded-2xl py-2.5 pr-2 pl-4 shadow-lg',
+        notice.error ? 'bg-rose-600 text-white shadow-rose-900/20' : 'bg-slate-900 text-white shadow-slate-900/20',
+      )}
+      role={notice.error ? 'alert' : 'status'}
+    >
+      <Icon name={notice.error ? 'alert' : 'check'} className={cx('h-4 w-4', tone === 'ok' && 'text-emerald-400')} />
+      <p className="flex-1 text-sm">{notice.text}</p>
+      {notice.undo && (
+        <button
+          type="button"
+          onClick={() => (notice.undo!(), onClose())}
+          className="cursor-pointer rounded-lg px-2 py-1.5 text-sm font-semibold text-emerald-300 hover:bg-white/10"
+        >
+          Desfazer
+        </button>
+      )}
       <button
         type="button"
         onClick={onClose}
-        className={cx(ui.noticeText[tone], '-my-2 -mr-2 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full hover:bg-black/5')}
+        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-white/70 hover:bg-white/10"
         aria-label="Fechar aviso"
       >
         <Icon name="close" className="h-4 w-4" />
       </button>
-    </div>
+    </div>,
+    toastRoot(),
   );
 }
 
@@ -282,6 +375,71 @@ export function Collapsible({ children, visible = 2, phoneOnly = false }: { chil
       )}
     </div>
   );
+}
+
+/** item de lista que abre a edição ao tocar: a linha inteira é o alvo, com a seta indicando que abre */
+export function ListButton({ onClick, children }: { onClick(): void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cx(
+        '-mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-center gap-3 rounded-xl px-2 py-3 text-left transition',
+        'outline-emerald-600 hover:bg-slate-50 focus-visible:outline-2 active:bg-slate-100',
+      )}
+    >
+      <div className="flex min-w-0 flex-1 items-start gap-3">{children}</div>
+      <Icon name="chevron-right" className="h-4 w-4 text-slate-300" />
+    </button>
+  );
+}
+
+/** seção que abre e fecha (detalhes, histórico, avançado); o resumo fica visível fechado */
+export function Disclosure({ title, summary, children, defaultOpen = false }: { title: string; summary?: ReactNode; children: ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className={cx(ui.card, 'flex flex-col shadow-sm shadow-slate-900/[0.03] sm:p-5')}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-8 cursor-pointer items-center gap-3 text-left">
+        <h2 className={cx(ui.subtitle, 'flex-1 tracking-tight')}>{title}</h2>
+        {summary}
+        <Icon name="chevron-down" className={cx('h-5 w-5 text-slate-400 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && <div className="flex animate-fade-in flex-col gap-3 pt-3">{children}</div>}
+    </section>
+  );
+}
+
+/** "Mais opções" dentro de um formulário: campos raros ficam escondidos até pedir */
+export function MoreOptions({ children, defaultOpen = false }: { children: ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="flex flex-col gap-4">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={cx(ui.link, 'flex cursor-pointer items-center gap-1 self-start')}>
+        Mais opções
+        <Icon name="chevron-down" className={cx('h-4 w-4 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && <div className="flex animate-fade-in flex-col gap-4 rounded-2xl bg-slate-50 p-4">{children}</div>}
+    </div>
+  );
+}
+
+/** ⓘ ao lado de um título: a explicação só aparece para quem pedir */
+export function HelpButton({ open, onToggle, topic }: { open: boolean; onToggle(): void; topic: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={`Ajuda: ${topic}`}
+      className={cx('flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition', open ? 'bg-emerald-50 text-emerald-700' : 'text-slate-400 hover:bg-slate-100')}
+    >
+      <Icon name="info" className="h-[18px] w-[18px]" />
+    </button>
+  );
+}
+
+export function HelpText({ children }: { children: ReactNode }) {
+  return <div className={cx(ui.muted, 'animate-fade-in rounded-xl bg-emerald-50/60 px-3 py-2.5 text-slate-600')}>{children}</div>;
 }
 
 export function Row({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -339,5 +497,40 @@ export function Loading() {
   );
 }
 
+// ---------- confirmação ----------
+// Folha do próprio app no lugar do window.confirm (que no iPhone mostra o endereço do site).
+// confirmAction é chamada de qualquer lugar; o <ConfirmHost /> montado na raiz desenha a folha.
+
+type ConfirmRequest = { message: string; confirmLabel: string; resolve(ok: boolean): void };
+let showConfirm: ((request: ConfirmRequest) => void) | null = null;
+
 /** confirmação de ação destrutiva (no mobile é Alert.alert) */
-export const confirmAction = (message: string) => Promise.resolve(window.confirm(message));
+export const confirmAction = (message: string, confirmLabel = 'Excluir') =>
+  new Promise<boolean>((resolve) => (showConfirm ? showConfirm({ message, confirmLabel, resolve }) : resolve(window.confirm(message))));
+
+export function ConfirmHost() {
+  const [request, setRequest] = useState<ConfirmRequest | null>(null);
+  useEffect(() => {
+    showConfirm = setRequest;
+    return () => {
+      showConfirm = null;
+    };
+  }, []);
+  const answer = (ok: boolean) => {
+    request?.resolve(ok);
+    setRequest(null);
+  };
+  return (
+    <Modal open={!!request} title="Tem certeza?" onClose={() => answer(false)}>
+      <p className={cx(ui.text, 'whitespace-pre-line')}>{request?.message}</p>
+      <Actions>
+        <Button variant="secondary" onClick={() => answer(false)}>
+          Cancelar
+        </Button>
+        <Button variant="danger" onClick={() => answer(true)}>
+          {request?.confirmLabel}
+        </Button>
+      </Actions>
+    </Modal>
+  );
+}
