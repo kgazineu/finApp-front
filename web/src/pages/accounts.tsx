@@ -1,7 +1,9 @@
 import {
-  accountKindLabel,
   accountToForm,
+  cx,
   emptyAccountForm,
+  formatDateTime,
+  money,
   ui,
   useAccounts,
   useAction,
@@ -10,12 +12,17 @@ import {
   type AccountKind,
 } from '@finapp/shared';
 import { useState, type FormEvent } from 'react';
-import { Actions, Badge, Button, Card, Checkbox, Empty, Field, FormError, ItemActions, Loading, Modal, NoticeBar, Row, Segmented, confirmAction } from '../components';
+import { Actions, Badge, Button, Card, Checkbox, Empty, Field, FormError, ListButton, Loading, Modal, NoticeBar, Segmented, confirmAction } from '../components';
 import { PageHeader } from '../layouts';
 
 const kindOptions: { value: AccountKind; label: string }[] = [
-  { value: 'asset', label: 'Ativo (soma)' },
-  { value: 'liability', label: 'Passivo (subtrai)' },
+  { value: 'asset', label: 'Conta ou carteira' },
+  { value: 'liability', label: 'Cartão ou dívida' },
+];
+
+const groups: { kind: AccountKind; title: string; empty: string }[] = [
+  { kind: 'asset', title: 'Contas e carteiras', empty: 'Nenhuma conta ainda. Cadastre o banco e a carteira onde fica seu dinheiro.' },
+  { kind: 'liability', title: 'Cartões e dívidas', empty: 'Nenhum cartão. Cadastre a fatura do cartão para ela descontar do total.' },
 ];
 
 export function AccountsPage() {
@@ -27,10 +34,9 @@ export function AccountsPage() {
   });
 
   async function remove(account: Account) {
-    const ok = await confirmAction(
-      `Remover "${account.name}"? Se ela já aparece em algum registro de saldo, será arquivada e o histórico fica guardado.`,
-    );
-    if (ok) await a.remove(account);
+    if (!(await confirmAction(`Excluir "${account.name}"? Se ela já aparece nos seus saldos, fica arquivada e o histórico é mantido.`))) return;
+    setEditing(null);
+    await a.remove(account);
   }
 
   const submit = (e: FormEvent) => {
@@ -40,57 +46,83 @@ export function AccountsPage() {
 
   const form = editing?.form;
   const setForm = (changes: Partial<AccountForm>) => editing && setEditing({ ...editing, form: { ...editing.form, ...changes } });
+  const open = (id: number | undefined, form: AccountForm) => (save.clearError(), setEditing({ id, form }));
+  const accounts = a.data ?? [];
+  const editingAccount = editing?.id ? accounts.find((x) => x.id === editing.id) : undefined;
+  // fatura é guardada positiva; na tela ela aparece negativa, como desconta do total
+  const shown = (account: Account, cents: number) => (account.kind === 'asset' ? cents : -cents);
 
   return (
     <>
       <PageHeader
         title="Contas"
-        description="Onde está o seu dinheiro. Ativos (banco, carteira) somam no total; passivos (fatura do cartão) subtraem."
-        action={<Button onClick={() => (save.clearError(), setEditing({ form: emptyAccountForm() }))}>+ Nova conta</Button>}
+        help="Contas e carteiras somam no seu total; cartões e dívidas subtraem. O saldo de cada uma é o da última vez que você atualizou os saldos, na tela inicial."
+        action={<Button onClick={() => open(undefined, emptyAccountForm())}>+ Nova conta</Button>}
       />
       <NoticeBar notice={a.notice} onClose={a.clear} />
+      <FormError error={a.error} />
 
-      <Card title="Contas ativas">
-        {a.loading && !a.data ? (
+      {a.loading && !a.data ? (
+        <Card>
           <Loading />
-        ) : a.data?.length ? (
-          a.data.map((account) => (
-            <Row key={account.id}>
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <p className={ui.strong}>{account.name}</p>
-                <div className="flex flex-wrap gap-1">
-                  <Badge tone={account.kind === 'asset' ? 'income' : 'expense'}>{accountKindLabel[account.kind]}</Badge>
-                  {account.hasYield && <Badge>Rende</Badge>}
+        </Card>
+      ) : (
+        groups.map((g) => {
+          const items = accounts.filter((x) => x.kind === g.kind);
+          const total = items.reduce((sum, x) => sum + (a.balanceOf(x.id) ?? 0), 0);
+          return (
+            <Card
+              key={g.kind}
+              title={g.title}
+              action={
+                a.last &&
+                items.length > 0 && <p className={cx('text-sm font-semibold', ui.amount(g.kind === 'asset' ? total : -total))}>{money(g.kind === 'asset' ? total : -total)}</p>
+              }
+            >
+              {items.length ? (
+                <div className="flex flex-col">
+                  {items.map((account) => {
+                    const balance = a.balanceOf(account.id);
+                    return (
+                      <ListButton key={account.id} onClick={() => open(account.id, accountToForm(account))}>
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <p className={cx(ui.strong, 'truncate')}>{account.name}</p>
+                          {account.hasYield && <Badge tone="income">Rende</Badge>}
+                        </div>
+                        {balance === null ? (
+                          <p className={ui.small}>sem saldo</p>
+                        ) : (
+                          <p className={cx('text-sm font-semibold whitespace-nowrap', ui.amount(shown(account, balance)))}>{money(shown(account, balance))}</p>
+                        )}
+                      </ListButton>
+                    );
+                  })}
                 </div>
-              </div>
-              <ItemActions
-                name={account.name}
-                onEdit={() => (save.clearError(), setEditing({ id: account.id, form: accountToForm(account) }))}
-                onRemove={() => remove(account)}
-              />
-            </Row>
-          ))
-        ) : (
-          <Empty>Nenhuma conta ainda. Cadastre suas contas para registrar saldos.</Empty>
-        )}
-        {a.error && <FormError error={a.error} />}
-      </Card>
+              ) : (
+                <Empty>{g.empty}</Empty>
+              )}
+            </Card>
+          );
+        })
+      )}
+      {a.last && <p className={cx(ui.small, 'text-center')}>Saldos de {formatDateTime(a.last.createdAt)}</p>}
 
       <Modal open={!!form} title={editing?.id ? 'Editar conta' : 'Nova conta'} onClose={() => setEditing(null)}>
         {form && (
           <form onSubmit={submit} className="flex flex-col gap-4">
-            <Field label="Nome" placeholder="Nubank, Inter, Fatura do cartão..." value={form.name} onChange={(name) => setForm({ name })} autoFocus />
-            <Segmented label="Tipo" value={form.kind} options={kindOptions} onChange={(kind) => setForm({ kind })} />
-            {form.kind === 'asset' ? (
-              <Checkbox checked={form.hasYield} onChange={(hasYield) => setForm({ hasYield })} label="Esta conta rende (conta remunerada)" />
-            ) : (
-              <p className={ui.small}>Passivo não tem rendimento. Informe a fatura como valor positivo nos registros de saldo.</p>
-            )}
+            <Field label="Nome" placeholder="Nubank, carteira, cartão…" value={form.name} onChange={(name) => setForm({ name })} autoFocus={!editing?.id} />
+            <div className="flex flex-col gap-1.5">
+              <Segmented label="Tipo" value={form.kind} options={kindOptions} onChange={(kind) => setForm({ kind })} />
+              <p className={ui.small}>{form.kind === 'asset' ? 'Soma no seu total.' : 'Subtrai do seu total. Ao atualizar os saldos, informe o valor da fatura.'}</p>
+            </div>
+            {form.kind === 'asset' && <Checkbox checked={form.hasYield} onChange={(hasYield) => setForm({ hasYield })} label="Rende (conta remunerada)" />}
             <FormError error={save.error} />
             <Actions>
-              <Button variant="secondary" onClick={() => setEditing(null)}>
-                Cancelar
-              </Button>
+              {editingAccount && (
+                <Button variant="ghostDanger" onClick={() => remove(editingAccount)}>
+                  Excluir
+                </Button>
+              )}
               <Button type="submit" busy={save.busy}>
                 Salvar
               </Button>

@@ -2,6 +2,7 @@ import { AuthProvider, ui, useAuth, type TokenStorage } from '@finapp/shared';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { ConfirmHost } from './components';
 import './index.css';
 import { AppLayout, AuthLayout } from './layouts';
 import { AccountsPage } from './pages/accounts';
@@ -57,6 +58,7 @@ createRoot(document.getElementById('root')!).render(
     <AuthProvider baseUrl={import.meta.env.VITE_API_URL ?? '/api'} storage={storage}>
       <BrowserRouter>
         <App />
+        <ConfirmHost />
       </BrowserRouter>
     </AuthProvider>
   </StrictMode>,

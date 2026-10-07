@@ -1,6 +1,7 @@
 import { cx, ui, useAuth } from '@finapp/shared';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router';
+import { HelpButton, HelpText } from './components';
 import { Icon, type IconName } from './icons';
 
 // mesmas seções das abas do app mobile (mobile/src/app/(app)/_layout.tsx)
@@ -147,21 +148,25 @@ export function AppLayout() {
 }
 
 /**
- * Título da página. No celular a ação principal (o "+ Novo...") vira um botão flutuante acima das
- * abas, ao alcance do polegar; do tablet em diante fica ao lado do título.
+ * Título da página. A explicação fica atrás do ⓘ (help). No celular a ação principal (o "+ Novo...")
+ * vira um botão flutuante acima das abas, ao alcance do polegar; do tablet em diante fica ao lado do título.
  */
-export function PageHeader({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+export function PageHeader({ title, help, action }: { title: string; help?: ReactNode; action?: ReactNode }) {
+  const [helpOpen, setHelpOpen] = useState(false);
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-      <div className="flex flex-col gap-1">
-        <h1 className={cx(ui.title, 'tracking-tight md:text-3xl')}>{title}</h1>
-        {description && <p className={cx(ui.muted, 'max-w-2xl')}>{description}</p>}
-      </div>
-      {action && (
-        <div className="max-md:fixed max-md:right-4 max-md:bottom-[calc(4.75rem+env(safe-area-inset-bottom))] max-md:z-30 max-md:*:rounded-full max-md:*:px-5 max-md:*:shadow-lg max-md:*:shadow-emerald-900/25 md:shrink-0">
-          {action}
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-1">
+          <h1 className={cx(ui.title, 'tracking-tight md:text-3xl')}>{title}</h1>
+          {help && <HelpButton open={helpOpen} onToggle={() => setHelpOpen(!helpOpen)} topic={title} />}
         </div>
-      )}
+        {action && (
+          <div className="max-md:fixed max-md:right-4 max-md:bottom-[calc(4.75rem+env(safe-area-inset-bottom))] max-md:z-30 max-md:*:rounded-full max-md:*:px-5 max-md:*:shadow-lg max-md:*:shadow-emerald-900/25 md:shrink-0">
+            {action}
+          </div>
+        )}
+      </div>
+      {helpOpen && <HelpText>{help}</HelpText>}
     </div>
   );
 }

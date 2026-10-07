@@ -76,6 +76,10 @@ export function thisMonth(now = new Date()): string {
   return `${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
 }
 
+export function today(now = new Date()): string {
+  return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
+}
+
 export function endOfThisMonth(now = new Date()): string {
   const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return `${pad(last.getDate())}/${pad(last.getMonth() + 1)}/${last.getFullYear()}`;
