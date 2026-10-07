@@ -1,6 +1,7 @@
 import {
   ApiError,
   PASSWORD_HINT,
+  cx,
   digits,
   formatDateTime,
   maskMoney,
@@ -14,7 +15,8 @@ import {
   type SavingsGoalForm,
 } from '@finapp/shared';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Button, Card, Field, FormError, Modal, NoticeBar, Segmented, confirmAction } from '../components';
+import { Actions, Button, Card, Field, FormError, Modal, NoticeBar, Segmented, confirmAction } from '../components';
+import { Icon } from '../icons';
 import { PageHeader } from '../layouts';
 
 export function ProfilePage() {
@@ -96,10 +98,10 @@ export function ProfilePage() {
 
       <Card>
         <div className="flex items-center gap-4">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-lg font-bold text-emerald-700">{initials}</span>
-          <div>
-            <p className={ui.subtitle}>{user.name}</p>
-            <p className={ui.muted}>{user.email}</p>
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-700">{initials}</span>
+          <div className="min-w-0">
+            <p className={cx(ui.subtitle, 'truncate')}>{user.name}</p>
+            <p className={cx(ui.muted, 'truncate')}>{user.email}</p>
             <p className={ui.small}>Conta criada em {formatDateTime(user.createdAt)}</p>
           </div>
         </div>
@@ -110,11 +112,11 @@ export function ProfilePage() {
           <Field label="Nome" autoComplete="name" value={name} onChange={(v) => (setSaved(false), setName(v))} />
           <Field label="E-mail" type="email" inputMode="email" autoComplete="email" value={email} onChange={(v) => (setSaved(false), setEmail(v))} />
           <FormError error={save.error} />
-          <div className="flex justify-end">
+          <Actions>
             <Button type="submit" busy={save.busy}>
               Salvar alterações
             </Button>
-          </div>
+          </Actions>
         </form>
       </Card>
 
@@ -128,26 +130,27 @@ export function ProfilePage() {
         </p>
         <NoticeBar notice={dataNotice.notice} onClose={dataNotice.clear} />
         <FormError error={exportData.error ?? importData.error} />
-        <div className="flex flex-wrap gap-2">
+        <Actions start>
           <Button busy={exportData.busy} onClick={() => (importData.clearError(), exportData.run())}>
             Exportar dados
           </Button>
           <Button variant="secondary" busy={importData.busy} onClick={() => (exportData.clearError(), fileInput.current?.click())}>
             Importar dados
           </Button>
-          <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={onFile} />
-        </div>
+        </Actions>
+        <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={onFile} />
       </Card>
 
       <Card title="Segurança">
-        <div className="flex flex-wrap gap-2">
+        <Actions start>
           <Button variant="secondary" onClick={() => (setCode(''), setPassword(''), setConfirmation(''), setChanging('send'))}>
             Alterar senha
           </Button>
           <Button variant="danger" onClick={() => signOut()}>
+            <Icon name="log-out" className="h-4 w-4" />
             Sair
           </Button>
-        </div>
+        </Actions>
       </Card>
 
       <Modal open={changing !== 'closed'} title="Alterar senha" onClose={() => setChanging('closed')}>
@@ -222,7 +225,7 @@ function SavingsGoalCard() {
         <Field label="Quanto guardar por mês" prefix="R$" inputMode="numeric" value={form.value} mask={maskMoney} onChange={(value) => setForm({ ...form, value })} />
       )}
       <FormError error={save.error ?? remove.error} />
-      <div className="flex flex-wrap gap-2">
+      <Actions start>
         <Button busy={save.busy} onClick={() => (remove.clearError(), save.run())}>
           Salvar reserva
         </Button>
@@ -231,7 +234,7 @@ function SavingsGoalCard() {
             Remover reserva
           </Button>
         )}
-      </div>
+      </Actions>
     </Card>
   );
 }

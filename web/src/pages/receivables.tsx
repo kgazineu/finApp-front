@@ -22,7 +22,7 @@ import {
   type ReceivableKind,
 } from '@finapp/shared';
 import { useState, type FormEvent } from 'react';
-import { Badge, Button, Card, Checkbox, Empty, Field, FormError, Loading, Modal, NoticeBar, Row, Segmented, confirmAction } from '../components';
+import { Actions, Badge, Button, Card, Checkbox, Empty, Field, FormError, IconButton, ItemActions, Loading, Modal, NoticeBar, Segmented, confirmAction } from '../components';
 import { PageHeader } from '../layouts';
 
 const kindOptions: { value: ReceivableKind; label: string }[] = [
@@ -85,53 +85,53 @@ export function ReceivablesPage() {
           r.data.map((item) => {
             const overdue = item.installments.some((i) => i.overdue);
             return (
-              <Row key={item.id}>
-                <div className="flex flex-col gap-1">
-                  <p className={overdue ? ui.strongOverdue : ui.strong}>{item.description}</p>
-                  <p className={ui.small}>
-                    {item.debtor} · {receivableSummary(item)}
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge>{receivableKindLabel[item.kind]}</Badge>
-                    {item.amountMode === 'installment' && <Badge>Valor fixo por parcela</Badge>}
-                    {overdue && <Badge tone="danger">Atrasado</Badge>}
+              <div key={item.id} className={cx('flex flex-col gap-2 py-3 last:border-b-0', ui.divider)}>
+                <div className="flex items-start gap-3">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <p className={overdue ? ui.strongOverdue : ui.strong}>{item.description}</p>
+                    <p className={ui.small}>
+                      {item.debtor} · {receivableSummary(item)}
+                    </p>
                   </div>
-                  <ul className="flex flex-col gap-1 pt-1">
-                    {item.installments.map((i) => (
-                      <li key={i.id} className="flex items-center gap-2">
-                        <Checkbox
-                          checked={!!i.paidAt}
-                          onChange={(paid) => r.setPaid(i.id, paid)}
-                          ariaLabel={`Parcela ${i.number} de ${item.description} recebida`}
-                          label={
-                            <span className={cx(i.overdue && ui.overdue)}>
-                              {i.number}ª · {money(i.amount)} · vence {formatDate(i.dueDate)}
+                  <p className={cx('pt-0.5 text-sm font-semibold whitespace-nowrap', ui.amount(receivableTotal(item)))}>{money(receivableTotal(item))}</p>
+                  <ItemActions
+                    name={item.description}
+                    onEdit={() => (update.clearError(), setEditing({ item, form: { debtor: item.debtor, description: item.description } }))}
+                    onRemove={() => remove(item)}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  <Badge>{receivableKindLabel[item.kind]}</Badge>
+                  {item.amountMode === 'installment' && <Badge>Valor fixo por parcela</Badge>}
+                  {overdue && <Badge tone="danger">Atrasado</Badge>}
+                </div>
+                {/* parcelas em largura total: no celular a lista não fica espremida ao lado do valor */}
+                <ul className="flex flex-col rounded-xl bg-slate-50 px-3 py-1">
+                  {item.installments.map((i) => (
+                    <li key={i.id} className="flex items-center justify-between gap-2 py-1">
+                      <Checkbox
+                        checked={!!i.paidAt}
+                        onChange={(paid) => r.setPaid(i.id, paid)}
+                        ariaLabel={`Parcela ${i.number} de ${item.description} recebida`}
+                        label={
+                          <span className="flex flex-col">
+                            <span className={cx('font-medium', i.overdue && ui.overdue)}>
+                              {i.number}ª · {money(i.amount)}
                             </span>
-                          }
-                        />
-                        <button
-                          type="button"
-                          className={cx(ui.link, 'cursor-pointer text-xs')}
-                          onClick={() => (updateInstallment.clearError(), setEditingInstallment({ item, installment: i, form: installmentToEditForm(i) }))}
-                        >
-                          editar
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <p className={cx('text-sm font-semibold', ui.amount(receivableTotal(item)))}>{money(receivableTotal(item))}</p>
-                  <div className="flex">
-                    <Button variant="ghost" onClick={() => (update.clearError(), setEditing({ item, form: { debtor: item.debtor, description: item.description } }))}>
-                      Editar
-                    </Button>
-                    <Button variant="ghostDanger" onClick={() => remove(item)}>
-                      Remover
-                    </Button>
-                  </div>
-                </div>
-              </Row>
+                            <span className={i.overdue ? ui.smallOverdue : ui.small}>vence {formatDate(i.dueDate)}</span>
+                          </span>
+                        }
+                      />
+                      <IconButton
+                        icon="pencil"
+                        label={`Editar ${i.number}ª parcela de ${item.description}`}
+                        className="-mr-2"
+                        onClick={() => (updateInstallment.clearError(), setEditingInstallment({ item, installment: i, form: installmentToEditForm(i) }))}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
             );
           })
         ) : (
@@ -159,7 +159,7 @@ export function ReceivablesPage() {
               hint={perInstallment ? 'Cada parcela vale exatamente isso (ex.: assinatura mensal).' : creating.kind === 'loan' ? 'Será dividido entre as parcelas.' : undefined}
             />
             {creating.kind === 'loan' && (
-              <div className="flex gap-3">
+              <div className="flex items-end gap-3">
                 {!perInstallment && (
                   <Field className="flex-1" label="Juros (%)" placeholder="0" inputMode="numeric" value={creating.interestRate} mask={(v) => digits(v).slice(0, 4)} onChange={(interestRate) => setCreating({ ...creating, interestRate })} />
                 )}
@@ -183,14 +183,14 @@ export function ReceivablesPage() {
                   : 'Juros simples sobre o total; as parcelas vencem mês a mês a partir da data de início.'}
             </p>
             <FormError error={create.error} />
-            <div className="flex justify-end gap-2">
+            <Actions>
               <Button variant="secondary" onClick={() => setCreating(null)}>
                 Cancelar
               </Button>
               <Button type="submit" busy={create.busy}>
                 Cadastrar
               </Button>
-            </div>
+            </Actions>
           </form>
         )}
       </Modal>
@@ -200,16 +200,16 @@ export function ReceivablesPage() {
           <form onSubmit={submit(update.run)} className="flex flex-col gap-4">
             <Field label="Quem deve" value={editing.form.debtor} onChange={(debtor) => setEditing({ ...editing, form: { ...editing.form, debtor } })} />
             <Field label="Descrição" value={editing.form.description} onChange={(description) => setEditing({ ...editing, form: { ...editing.form, description } })} />
-            <p className={ui.small}>Para mudar valor ou vencimento, use "editar" na parcela: dá para aplicar às próximas em aberto.</p>
+            <p className={ui.small}>Para mudar valor ou vencimento, use o lápis da parcela: dá para aplicar às próximas em aberto.</p>
             <FormError error={update.error} />
-            <div className="flex justify-end gap-2">
+            <Actions>
               <Button variant="secondary" onClick={() => setEditing(null)}>
                 Cancelar
               </Button>
               <Button type="submit" busy={update.busy}>
                 Salvar
               </Button>
-            </div>
+            </Actions>
           </form>
         )}
       </Modal>
@@ -235,14 +235,14 @@ export function ReceivablesPage() {
             )}
             <p className={ui.small}>Parcelas já recebidas não mudam. Use isso, por exemplo, quando o valor de uma assinatura aumentar.</p>
             <FormError error={updateInstallment.error} />
-            <div className="flex justify-end gap-2">
+            <Actions>
               <Button variant="secondary" onClick={() => setEditingInstallment(null)}>
                 Cancelar
               </Button>
               <Button type="submit" busy={updateInstallment.busy}>
                 Salvar
               </Button>
-            </div>
+            </Actions>
           </form>
         )}
       </Modal>

@@ -21,7 +21,7 @@ import {
 } from '@finapp/shared';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Badge, Button, Card, Checkbox, Collapsible, Empty, Field, FormError, Loading, Modal, NoticeBar, Row, Segmented } from '../components';
+import { Actions, Badge, Button, Card, Checkbox, Collapsible, Empty, Field, FormError, Loading, Modal, NoticeBar, Row, Segmented } from '../components';
 import { PageHeader } from '../layouts';
 
 const monthOptions = [
@@ -61,64 +61,57 @@ export function ProjectionPage() {
       <NoticeBar notice={p.notice ?? (open.error ? { text: open.error, error: true } : null)} onClose={() => (p.clear(), open.clearError())} />
       {p.error && <NoticeBar notice={{ text: p.error, error: true }} onClose={() => p.reload()} />}
 
-      <Card title="Saldo atual">
-        {p.balance ? (
-          <div className="flex flex-col gap-4">
-            <div>
-              <p className={ui.muted}>No registro de {formatDateTime(p.balance.createdAt)} você tinha</p>
-              <p className={p.balance.total < 0 ? ui.bigNegative : ui.big}>{money(p.balance.total)}</p>
-              {p.balance.delta !== null && (
-                <p className={cx('text-sm font-semibold', ui.amount(p.balance.delta))}>{signedMoney(p.balance.delta)} desde o registro anterior</p>
-              )}
+      {p.balance ? (
+        <BalanceHero balance={p.balance} />
+      ) : (
+        <Card title="Saldo atual">
+          {p.projection ? (
+            <Empty>Nenhum registro ainda. Use "+ Novo registro de saldos" para anotar quanto tem em cada conta e em cada fatura.</Empty>
+          ) : (
+            <Loading />
+          )}
+        </Card>
+      )}
+
+      {/* em telas largas as duas listas de pendências ficam lado a lado */}
+      <div className="flex flex-col gap-4 md:gap-5 xl:grid xl:grid-cols-2 xl:items-start">
+        <Card title="Transações pendentes" action={p.projection && <Total cents={p.current.transactionsTotal} />}>
+          <p className={ui.small}>Vencidas e deste mês. Marque quando pagar ou receber.</p>
+          {p.current.transactions.length ? (
+            <Collapsible phoneOnly>
+              {p.current.transactions.map((i) => (
+                <TransactionRow key={i.id} item={i} onPay={() => p.payTransaction(i.id, true)} />
+              ))}
+            </Collapsible>
+          ) : (
+            <Empty>Nada pendente até o fim deste mês.</Empty>
+          )}
+        </Card>
+
+        <Card title="A receber pendentes" action={p.projection && <Total cents={p.current.receivablesTotal} />}>
+          {p.current.receivables.length ? (
+            <div className="flex flex-col">
+              {p.current.receivables.map((i) => (
+                <ReceivableRow key={i.id} item={i} onPay={() => p.payReceivable(i.id, true)} />
+              ))}
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Entries title="Contas" entries={p.balance.accounts} total={p.balance.accountsTotal} empty="Nenhuma conta com saldo." />
-              <Entries title="Faturas" entries={p.balance.bills} total={-p.balance.billsTotal} empty="Nenhuma fatura." bill />
-            </div>
-          </div>
-        ) : p.projection ? (
-          <Empty>Nenhum registro ainda. Use "+ Novo registro de saldos" para anotar quanto tem em cada conta e em cada fatura.</Empty>
-        ) : (
-          <Loading />
-        )}
-      </Card>
+          ) : (
+            <Empty>Ninguém te deve nada até o fim deste mês.</Empty>
+          )}
+        </Card>
+      </div>
 
-      <Card title="Transações pendentes" action={p.projection && <Total cents={p.current.transactionsTotal} />}>
-        <p className={ui.small}>Vencidas e deste mês. Marque quando pagar ou receber.</p>
-        {p.current.transactions.length ? (
-          <Collapsible phoneOnly>
-            {p.current.transactions.map((i) => (
-              <TransactionRow key={i.id} item={i} onPay={() => p.payTransaction(i.id, true)} />
-            ))}
-          </Collapsible>
-        ) : (
-          <Empty>Nada pendente até o fim deste mês.</Empty>
-        )}
-      </Card>
-
-      <Card title="A receber pendentes" action={p.projection && <Total cents={p.current.receivablesTotal} />}>
-        {p.current.receivables.length ? (
-          <div className="flex flex-col">
-            {p.current.receivables.map((i) => (
-              <ReceivableRow key={i.id} item={i} onPay={() => p.payReceivable(i.id, true)} />
-            ))}
-          </div>
-        ) : (
-          <Empty>Ninguém te deve nada até o fim deste mês.</Empty>
-        )}
-      </Card>
-
-      <Card>
+      <Card title="Projeção">
         <Segmented label="Projetar para" value={p.months} options={monthOptions} onChange={p.setMonths} />
         {p.projection && p.breakdown ? (
           <div className="flex flex-col gap-3 pt-2">
             <div>
               <p className={ui.muted}>Em {formatDate(p.projection.projectedFor)} você terá</p>
-              <p className={p.projection.projectedAmount < 0 ? ui.bigNegative : ui.big}>{money(p.projection.projectedAmount)}</p>
+              <p className={cx(p.projection.projectedAmount < 0 ? ui.bigNegative : ui.big, 'tracking-tight')}>{money(p.projection.projectedAmount)}</p>
               <p className={ui.small}>Conta como pago nesse dia 1 tudo que vence até o fim do mês, atrasados incluídos.</p>
             </div>
             {/* último saldo registrado + crescimento total = valor projetado */}
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+            <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
               <Breakdown label="Último saldo registrado" cents={p.breakdown.lastTotal} />
               <Breakdown label="Total de entradas" cents={p.breakdown.incomes} />
               <Breakdown label="Despesas fixas" cents={-p.breakdown.fixedExpenses} />
@@ -129,7 +122,7 @@ export function ProjectionPage() {
             {/* API antiga não manda os números por mês: somem em vez de quebrar a tela durante o deploy */}
             {p.monthly && (
               <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+                <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
                   <Breakdown label="Crescimento por mês" cents={p.monthly.growth} />
                   {p.monthly.goal !== null && (
                     <>
@@ -169,7 +162,7 @@ export function ProjectionPage() {
                         {money(p.simulation.projectedAmount)}
                       </p>
                     </div>
-                    <dl className="text-sm">
+                    <dl className="text-sm sm:min-w-40">
                       <Breakdown label="Sobraria por mês" cents={p.simulation.growth} />
                     </dl>
                   </div>
@@ -203,20 +196,22 @@ export function ProjectionPage() {
 
       <Card title="Registros de saldo">
         {p.registrations.length ? (
-          p.registrations.map((r) => (
-            <div key={r.id} className={cx('flex items-start gap-3 py-3', ui.divider)}>
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <p className={ui.strong}>
-                  #{r.id} · {formatDateTime(r.createdAt)}
-                </p>
-                <p className={ui.small}>{r.entries.map((e) => `${e.accountName}: ${money(e.amount)}`).join(' · ')}</p>
+          <Collapsible visible={3} phoneOnly>
+            {p.registrations.map((r) => (
+              <div key={r.id} className={cx('flex items-start gap-3 py-3 last:border-b-0', ui.divider)}>
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <p className={ui.strong}>
+                    #{r.id} · {formatDateTime(r.createdAt)}
+                  </p>
+                  <p className={ui.small}>{r.entries.map((e) => `${e.accountName}: ${money(e.amount)}`).join(' · ')}</p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end">
+                  <p className={ui.strong}>{money(r.total)}</p>
+                  <p className={cx('text-sm font-semibold', ui.amount(r.delta ?? 0))}>{deltaText(r.delta)}</p>
+                </div>
               </div>
-              <div className="flex shrink-0 flex-col items-end">
-                <p className={ui.strong}>{money(r.total)}</p>
-                <p className={cx('text-sm font-semibold', ui.amount(r.delta ?? 0))}>{deltaText(r.delta)}</p>
-              </div>
-            </div>
-          ))
+            ))}
+          </Collapsible>
         ) : (
           <Empty>Nenhum registro ainda. Registre o saldo das suas contas para começar.</Empty>
         )}
@@ -228,9 +223,9 @@ export function ProjectionPage() {
           <Collapsible>
             {p.paid.map((i) => (
               <Row key={i.key}>
-                <div className="flex items-start gap-3">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
                   <Checkbox checked onChange={() => p.setPaid(i.toggle, false)} ariaLabel={`Desmarcar ${i.label}`} />
-                  <div className="flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1">
                     <p className={ui.strong}>{i.label}</p>
                     <p className={ui.small}>Marcada em {formatDateTime(i.paidAt)}</p>
                   </div>
@@ -273,18 +268,40 @@ export function ProjectionPage() {
               </p>
             )}
             <FormError error={save.error} />
-            <div className="flex justify-end gap-2">
+            <Actions>
               <Button variant="secondary" onClick={() => setBilling(null)}>
                 Cancelar
               </Button>
               <Button type="submit" busy={save.busy} disabled={!billing.accounts.length}>
                 Registrar
               </Button>
-            </div>
+            </Actions>
           </form>
         )}
       </Modal>
     </>
+  );
+}
+
+/** saldo atual em destaque (cartão escuro), com a composição por conta e fatura logo abaixo */
+function BalanceHero({ balance }: { balance: NonNullable<ReturnType<typeof useProjection>['balance']> }) {
+  return (
+    <section className="flex flex-col gap-4 rounded-3xl bg-linear-to-br from-slate-900 via-slate-900 to-emerald-900 p-4 text-white shadow-lg shadow-slate-900/10 sm:p-5">
+      <div className="flex flex-col gap-1 px-1 pt-1">
+        <h2 className="text-sm font-medium text-slate-300">Saldo atual</h2>
+        <p className={cx('text-4xl font-bold tracking-tight', balance.total < 0 ? 'text-rose-300' : 'text-white')}>{money(balance.total)}</p>
+        {balance.delta !== null && (
+          <p className={cx('text-sm font-semibold', balance.delta > 0 ? 'text-emerald-300' : balance.delta < 0 ? 'text-rose-300' : 'text-slate-300')}>
+            {signedMoney(balance.delta)} desde o registro anterior
+          </p>
+        )}
+        <p className="text-xs text-slate-400">Registro de {formatDateTime(balance.createdAt)}</p>
+      </div>
+      <div className="grid gap-4 rounded-2xl bg-white p-4 sm:grid-cols-2">
+        <Entries title="Contas" entries={balance.accounts} total={balance.accountsTotal} empty="Nenhuma conta com saldo." />
+        <Entries title="Faturas" entries={balance.bills} total={-balance.billsTotal} empty="Nenhuma fatura." bill />
+      </div>
+    </section>
   );
 }
 
@@ -316,7 +333,7 @@ function Entries({ title, entries, total, empty, bill }: { title: string; entrie
 // linha compacta das pendências: badges ao lado da descrição e o valor sempre à direita (não quebra para baixo)
 function PendingRow({ children, amount }: { children: ReactNode; amount: ReactNode }) {
   return (
-    <div className={cx('flex items-center gap-3 py-2', ui.divider)}>
+    <div className={cx('flex items-center gap-3 py-2.5 last:border-b-0', ui.divider)}>
       {children}
       {amount}
     </div>
@@ -368,7 +385,7 @@ function Total({ cents }: { cents: number }) {
 
 function Breakdown({ label, cents }: { label: string; cents: number }) {
   return (
-    <div>
+    <div className="flex flex-col gap-0.5 rounded-xl bg-slate-50 px-3 py-2.5">
       <dt className={ui.small}>{label}</dt>
       <dd className={cx('font-semibold', ui.amount(cents))}>{signedMoney(cents)}</dd>
     </div>

@@ -18,7 +18,7 @@ import {
   type TransactionKind,
 } from '@finapp/shared';
 import { useState, type FormEvent } from 'react';
-import { Badge, Button, Card, Checkbox, Empty, Field, FormError, Loading, Modal, NoticeBar, Row, Segmented, confirmAction } from '../components';
+import { Actions, Badge, Button, Card, Checkbox, Empty, Field, FormError, ItemActions, Loading, Modal, NoticeBar, Row, Segmented, confirmAction } from '../components';
 import { PageHeader } from '../layouts';
 
 const kindOptions: { value: TransactionKind; label: string }[] = [
@@ -63,7 +63,7 @@ export function TransactionsPage() {
         ) : t.data?.length ? (
           t.data.map((item) => (
             <Row key={item.id}>
-              <div className="flex flex-col gap-1">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <p className={ui.strong}>{item.description}</p>
                 <div className="flex flex-wrap gap-1">
                   <Badge tone={item.kind}>{transactionKindLabel[item.kind]}</Badge>
@@ -71,16 +71,13 @@ export function TransactionsPage() {
                 </div>
                 <p className={ui.small}>{scheduleText(item)}</p>
               </div>
-              <div className="flex flex-col items-end gap-1">
+              <div className="flex shrink-0 flex-col items-end gap-1">
                 <p className={cx('text-sm font-semibold', ui.amount(signedAmount(item)))}>{money(signedAmount(item))}</p>
-                <div className="flex">
-                  <Button variant="ghost" onClick={() => (update.clearError(), setEditing({ item, form: recurringToEditForm(item) }))}>
-                    Editar
-                  </Button>
-                  <Button variant="ghostDanger" onClick={() => remove(item)}>
-                    Remover
-                  </Button>
-                </div>
+                <ItemActions
+                  name={item.description}
+                  onEdit={() => (update.clearError(), setEditing({ item, form: recurringToEditForm(item) }))}
+                  onRemove={() => remove(item)}
+                />
               </div>
             </Row>
           ))
@@ -101,24 +98,24 @@ export function TransactionsPage() {
               label="Fixa (repete sem data para acabar, como salário e aluguel)"
             />
             <Field label="Valor" prefix="R$" inputMode="numeric" value={creating.amount} mask={maskMoney} onChange={(amount) => setCreating({ ...creating, amount })} />
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 items-end gap-3">
               <Field className="flex-1" label="Começa em" placeholder="MM/AAAA" inputMode="numeric" value={creating.startMonth} mask={maskMonth} onChange={(startMonth) => setCreating({ ...creating, startMonth })} />
               <Field className="flex-1" label="Dia do mês" placeholder="sem dia certo" inputMode="numeric" value={creating.dayOfMonth} mask={(v) => digits(v).slice(0, 2)} onChange={(dayOfMonth) => setCreating({ ...creating, dayOfMonth })} />
             </div>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 items-end gap-3">
               <Field className="flex-1" label="A cada quantos meses" placeholder="1" inputMode="numeric" value={creating.intervalMonths} mask={(v) => digits(v).slice(0, 3)} onChange={(intervalMonths) => setCreating({ ...creating, intervalMonths })} />
               <Field className="flex-1" label="Quantas vezes" inputMode="numeric" value={creating.installments} mask={(v) => digits(v).slice(0, 3)} onChange={(installments) => setCreating({ ...creating, installments })} />
             </div>
             <p className={ui.small}>"Quantas vezes" vazio: fixa repete sem fim, variável acontece uma vez só. Pode começar no passado: as parcelas já vencidas aparecem como atrasadas e você marca as que já pagou ou recebeu.</p>
             <FormError error={create.error} />
-            <div className="flex justify-end gap-2">
+            <Actions>
               <Button variant="secondary" onClick={() => setCreating(null)}>
                 Cancelar
               </Button>
               <Button type="submit" busy={create.busy}>
                 Cadastrar
               </Button>
-            </div>
+            </Actions>
           </form>
         )}
       </Modal>
@@ -128,7 +125,7 @@ export function TransactionsPage() {
           <form onSubmit={submit(update.run)} className="flex flex-col gap-4">
             <Field label="Descrição" value={editing.form.description} onChange={(description) => setEditing({ ...editing, form: { ...editing.form, description } })} />
             <Field label="Valor" prefix="R$" inputMode="numeric" value={editing.form.amount} mask={maskMoney} onChange={(amount) => setEditing({ ...editing, form: { ...editing.form, amount } })} />
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 items-end gap-3">
               <Field className="flex-1" label="Dia do mês" placeholder="sem dia certo" inputMode="numeric" value={editing.form.dayOfMonth} mask={(v) => digits(v).slice(0, 2)} onChange={(dayOfMonth) => setEditing({ ...editing, form: { ...editing.form, dayOfMonth } })} />
               <Field className="flex-1" label="Termina em" placeholder="sem fim" inputMode="numeric" value={editing.form.endMonth} mask={maskMonth} onChange={(endMonth) => setEditing({ ...editing, form: { ...editing.form, endMonth } })} />
             </div>
@@ -136,14 +133,14 @@ export function TransactionsPage() {
               Vazio = sem dia certo / sem fim. Parcelas já pagas não mudam. Tipo, fixa, início e intervalo não podem ser editados: para isso, remova e cadastre de novo.
             </p>
             <FormError error={update.error} />
-            <div className="flex justify-end gap-2">
+            <Actions>
               <Button variant="secondary" onClick={() => setEditing(null)}>
                 Cancelar
               </Button>
               <Button type="submit" busy={update.busy}>
                 Salvar
               </Button>
-            </div>
+            </Actions>
           </form>
         )}
       </Modal>
