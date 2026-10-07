@@ -117,19 +117,71 @@ export function ProjectionPage() {
               <p className={p.projection.projectedAmount < 0 ? ui.bigNegative : ui.big}>{money(p.projection.projectedAmount)}</p>
               <p className={ui.small}>Conta como pago nesse dia 1 tudo que vence até o fim do mês, atrasados incluídos.</p>
             </div>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-5">
+            {/* estes cinco somados dão o valor projetado */}
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-5">
               <Breakdown label="Último registro" cents={p.breakdown.lastTotal} />
-              <Breakdown label="Entradas" cents={p.breakdown.incomes} />
-              <Breakdown label="Despesas" cents={-p.breakdown.expenses} />
-              <Breakdown label="A receber" cents={p.breakdown.receivables} />
-              {/* API antiga não manda o crescimento: some em vez de quebrar a tela durante o deploy */}
-              {p.projection.monthlyGrowthMonth && <Breakdown label="Crescimento por mês" cents={p.projection.monthlyGrowth} />}
+              <Breakdown label="Total de entradas" cents={p.breakdown.incomes} />
+              <Breakdown label="Despesas fixas" cents={-p.breakdown.fixedExpenses} />
+              <Breakdown label="Despesas variáveis" cents={-p.breakdown.variableExpenses} />
+              <Breakdown label="Recebimento total" cents={p.breakdown.receivables} />
             </dl>
-            {p.projection.monthlyGrowthMonth && (
-              <p className={ui.small}>
-                Crescimento por mês: entradas + a receber − despesas fixas de {formatMonth(p.projection.monthlyGrowthMonth)}, pelo que está
-                cadastrado (despesas variáveis e parcelamentos ficam de fora).
-              </p>
+            {/* API antiga não manda os números por mês: somem em vez de quebrar a tela durante o deploy */}
+            {p.monthly && (
+              <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-5">
+                  <Breakdown label="Recebimento por mês" cents={p.monthly.receivables} />
+                  <Breakdown label="Crescimento por mês" cents={p.monthly.growth} />
+                  {p.monthly.goal !== null && (
+                    <>
+                      <Breakdown label={p.monthly.goalPercent ? `Guardar (${p.monthly.goalPercent}%)` : 'Guardar por mês'} cents={p.monthly.goal} />
+                      <Breakdown label="Para gastar no mês" cents={p.monthly.toSpend ?? 0} />
+                    </>
+                  )}
+                </dl>
+                <p className={ui.small}>
+                  Por mês: {formatMonth(p.monthly.month)}, pelo que está cadastrado. Crescimento = entradas + recebimentos − despesas fixas e
+                  variáveis, como na projeção.{' '}
+                  {p.monthly.goal === null ? (
+                    <>
+                      Defina uma meta de guardar no{' '}
+                      <Link to="/perfil" className={ui.link}>
+                        Perfil
+                      </Link>{' '}
+                      para ver quanto sobra para gastar.
+                    </>
+                  ) : (
+                    'A meta e o "para gastar" não mudam a projeção.'
+                  )}
+                </p>
+                <Checkbox checked={p.simulation.on} onChange={p.simulation.setOn} label="Simular um gasto por mês (só na tela, não salva nada)" />
+                {p.simulation.on && (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
+                    <Field
+                      className="sm:w-60"
+                      label="Quanto vou gastar por mês"
+                      prefix="R$"
+                      inputMode="numeric"
+                      value={p.simulation.spend}
+                      mask={maskMoney}
+                      onChange={p.simulation.setSpend}
+                    />
+                    <div>
+                      <p className={ui.small}>Em {formatDate(p.projection.projectedFor)} você teria</p>
+                      <p className={cx('text-2xl font-bold', p.simulation.projectedAmount < 0 ? 'text-rose-700' : 'text-slate-900')}>
+                        {money(p.simulation.projectedAmount)}
+                      </p>
+                    </div>
+                    <dl className="text-sm">
+                      <Breakdown label="Sobraria por mês" cents={p.simulation.growth} />
+                    </dl>
+                  </div>
+                )}
+                {p.simulation.on && (
+                  <p className={ui.small}>
+                    Tira o gasto de cada um dos {p.months} {p.months === 1 ? 'mês' : 'meses'} da projeção. A projeção de verdade continua a de cima.
+                  </p>
+                )}
+              </div>
             )}
             {p.upcoming.transactions.length + p.upcoming.receivables.length > 0 && (
               <div className="flex flex-col gap-1 border-t border-slate-100 pt-3">

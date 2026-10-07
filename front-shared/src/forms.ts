@@ -16,6 +16,7 @@ import type {
   RecurringCreateInput,
   RecurringTransaction,
   RecurringUpdateInput,
+  SavingsGoal,
   TransactionKind,
 } from './types';
 
@@ -50,6 +51,19 @@ export const accountPayload = (f: AccountForm): AccountInput => ({
   kind: f.kind,
   hasYield: f.kind === 'asset' && f.hasYield, // passivo nunca rende
 });
+
+// ---------- meta de guardar ----------
+
+export type SavingsGoalForm = { kind: 'percent' | 'amount'; value: string };
+
+export const savingsGoalToForm = (g: SavingsGoal | null): SavingsGoalForm =>
+  g?.amount != null ? { kind: 'amount', value: centsToInput(g.amount) } : { kind: 'percent', value: g?.percent != null ? String(g.percent) : '' };
+
+export function savingsGoalPayload(f: SavingsGoalForm): SavingsGoal {
+  if (f.kind === 'amount') return { percent: null, amount: positiveMoney(f.value, 'quanto quer guardar por mês') };
+  const percent = optionalInt(f.value, 'A porcentagem', 1, 100);
+  return percent === undefined ? fail('Informe a porcentagem') : { percent, amount: null };
+}
 
 // ---------- transação planejada ----------
 

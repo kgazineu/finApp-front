@@ -11,6 +11,7 @@ import {
   recurringPayload,
   recurringUpdatePayload,
   installmentEditPayload,
+  savingsGoalPayload,
   type AccountForm,
   type BillingForm,
   type InstallmentEditForm,
@@ -18,8 +19,9 @@ import {
   type ReceivableForm,
   type RecurringEditForm,
   type RecurringForm,
+  type SavingsGoalForm,
 } from './forms';
-import { money, signedMoney, splitByMonth } from './format';
+import { money, parseMoney, signedMoney, splitByMonth } from './format';
 import { signedAmount } from './labels';
 import type { Account, BillingRegistration, Installment, Projection, Receivable, RecurringTransaction, TransactionInstallment, User } from './types';
 
@@ -230,10 +232,11 @@ export function useProjection() {
   const [months, setMonths] = useState(1);
 
   const query = useQuery(`projection:${months}`, async () => {
-    const [projection, paidTransactions, paidReceivables] = await Promise.all([
+    const [projection, paidTransactions, paidReceivables, goal] = await Promise.all([
       api.billings.projection(months),
       api.recurring.paid(),
       api.receivables.paid(),
+      api.savingsGoal.get().catch(() => null), // a meta é opcional: sem ela a tela continua
     ]);
 
     const paid: PaidItem[] = [
@@ -255,7 +258,7 @@ export function useProjection() {
       })),
     ].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
 
-    return { projection, paid };
+    return { projection, paid, goal };
   });
 
   const projection: Projection | null = query.data?.projection ?? null;
@@ -263,12 +266,24 @@ export function useProjection() {
   const last = projection?.billingRegistrations.at(-1) ?? null;
 
   /** o que compõe o valor projetado: tudo até o fim do mês da projeção */
+  const expenses = projection?.pendingTransactions.filter((i) => i.kind === 'expense') ?? [];
   const breakdown = projection && {
     lastTotal: last?.total ?? 0,
     incomes: sum(projection.pendingTransactions.filter((i) => i.kind === 'income')),
-    expenses: sum(projection.pendingTransactions.filter((i) => i.kind === 'expense')),
+    fixedExpenses: sum(expenses.filter((i) => i.isFixed)),
+    variableExpenses: sum(expenses.filter((i) => !i.isFixed)),
     receivables: sum(projection.pendingReceivables),
   };
+
+  // o mês que vem: a meta e o "para gastar" só aparecem na tela, não mudam a projeção
+  const goal = query.data?.goal ?? null;
+  const growth = projection?.monthlyGrowth ?? 0;
+  const goalAmount = goal?.percent != null ? Math.max(0, Math.round((growth * goal.percent) / 100)) : (goal?.amount ?? null);
+
+  // simulação de um gasto por mês: só conta na tela, nada vai para a API
+  const [simulating, setSimulating] = useState(false);
+  const [spend, setSpend] = useState('');
+  const spendCents = parseMoney(spend) ?? 0;
 
   // pendência de verdade é o que já venceu ou vence até o fim deste mês; o que vence depois só entra
   // na conta da projeção (com "1 mês", o salário do mês que vem não é pendência)
@@ -295,6 +310,26 @@ export function useProjection() {
     last,
     balance: last ? balanceOf(last) : null,
     breakdown,
+    /** o mês que vem (null com API antiga): recebimento, o que sobra, meta e quanto dá para gastar */
+    monthly: projection?.monthlyGrowthMonth
+      ? {
+          month: projection.monthlyGrowthMonth,
+          receivables: projection.monthlyReceivables ?? 0,
+          growth,
+          goal: goalAmount,
+          goalPercent: goal?.percent ?? null,
+          toSpend: goalAmount === null ? null : growth - goalAmount,
+        }
+      : null,
+    /** tira um gasto por mês da projeção (vezes os meses escolhidos), só na tela */
+    simulation: {
+      on: simulating,
+      setOn: setSimulating,
+      spend,
+      setSpend,
+      projectedAmount: (projection?.projectedAmount ?? 0) - spendCents * months,
+      growth: growth - spendCents,
+    },
     /** pendentes agora: vencidas e do mês atual (não mudam com os meses da projeção) */
     current: {
       transactions: transactions.current,
@@ -332,6 +367,28 @@ function balanceOf(reg: BillingRegistration) {
   const accounts = reg.entries.filter((e) => e.accountKind === 'asset');
   const bills = reg.entries.filter((e) => e.accountKind === 'liability');
   return { total: reg.total, delta: reg.delta, createdAt: reg.createdAt, accounts, bills, accountsTotal: sum(accounts), billsTotal: sum(bills) };
+}
+
+/** meta de guardar por mês (perfil): só um número para a tela inicial */
+export function useSavingsGoal() {
+  const api = useApi();
+  const notice = useNotice();
+  const query = useQuery('savingsGoal', () => api.savingsGoal.get());
+
+  return {
+    ...query,
+    ...notice,
+    async save(form: SavingsGoalForm) {
+      await api.savingsGoal.save(savingsGoalPayload(form));
+      notice.ok('Meta salva. Ela aparece na tela inicial, junto da projeção.');
+      await query.reload();
+    },
+    async remove() {
+      await api.savingsGoal.save({ percent: null, amount: null });
+      notice.ok('Meta removida.');
+      await query.reload();
+    },
+  };
 }
 
 export function useAccounts() {

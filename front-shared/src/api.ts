@@ -12,6 +12,7 @@ import type {
   RecurringCreateInput,
   RecurringTransaction,
   RecurringUpdateInput,
+  SavingsGoal,
   Session,
   TransactionInstallment,
   User,
@@ -82,6 +83,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
   const get = <T>(path: string) => request<T>('GET', path);
   const post = <T>(path: string, body: unknown) => request<T>('POST', path, body);
   const patch = <T>(path: string, body: unknown) => request<T>('PATCH', path, body);
+  const put = <T>(path: string, body: unknown) => request<T>('PUT', path, body);
   const del = <T>(path: string) => request<T>('DELETE', path);
 
   return {
@@ -95,6 +97,12 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
       verify: (email: string, code: string) => post<Message>('/password-resets/verify', { email, code }),
       confirm: (email: string, code: string, password: string) =>
         post<Message>('/password-resets/confirm', { email, code, password }),
+    },
+
+    /** meta de guardar por mês: só aparece na tela inicial, não muda a projeção */
+    savingsGoal: {
+      get: () => get<SavingsGoal>('/savings-goal'),
+      save: (body: SavingsGoal) => put<SavingsGoal>('/savings-goal', body),
     },
 
     /** backup de todos os dados do usuário; o arquivo é opaco para o front */

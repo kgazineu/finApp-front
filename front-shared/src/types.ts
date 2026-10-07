@@ -143,10 +143,15 @@ export type Projection = {
   projectedAmount: number;
   /** no mês que vem: entradas + a receber − despesas fixas, pelas regras (pagas ou não) */
   monthlyGrowth: number;
+  /** parcelas a receber que vencem no mês que vem (pagas ou não) */
+  monthlyReceivables: number;
   /** AAAA-MM do mês usado no crescimento */
   monthlyGrowthMonth: string;
   pendingTransactions: TransactionInstallment[];
   pendingReceivables: ReceivableInstallment[];
 };
+
+/** meta de guardar por mês: porcentagem do que sobra ou valor fixo; os dois nulos = sem meta */
+export type SavingsGoal = { percent: number | null; amount: number | null };
 
 export type Message = { message: string };

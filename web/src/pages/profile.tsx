@@ -1,6 +1,20 @@
-import { ApiError, PASSWORD_HINT, digits, formatDateTime, passwordsMatch, ui, useAction, useAuth, useNotice } from '@finapp/shared';
-import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Button, Card, Field, FormError, Modal, NoticeBar, confirmAction } from '../components';
+import {
+  ApiError,
+  PASSWORD_HINT,
+  digits,
+  formatDateTime,
+  maskMoney,
+  passwordsMatch,
+  savingsGoalToForm,
+  ui,
+  useAction,
+  useAuth,
+  useNotice,
+  useSavingsGoal,
+  type SavingsGoalForm,
+} from '@finapp/shared';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Button, Card, Field, FormError, Modal, NoticeBar, Segmented, confirmAction } from '../components';
 import { PageHeader } from '../layouts';
 
 export function ProfilePage() {
@@ -104,6 +118,8 @@ export function ProfilePage() {
         </form>
       </Card>
 
+      <SavingsGoalCard />
+
       <Card title="Seus dados">
         <p className={ui.muted}>
           Baixe um arquivo com tudo o que você cadastrou: contas, registros de saldo, transações, valores a receber, lançamentos e
@@ -166,5 +182,58 @@ export function ProfilePage() {
         )}
       </Modal>
     </>
+  );
+}
+
+/** meta de guardar por mês: só um número para a tela inicial (quanto guardar e quanto sobra para gastar) */
+function SavingsGoalCard() {
+  const goal = useSavingsGoal();
+  const [form, setForm] = useState<SavingsGoalForm>(() => savingsGoalToForm(goal.data));
+  useEffect(() => {
+    if (goal.data) setForm(savingsGoalToForm(goal.data));
+  }, [goal.data]);
+  const save = useAction(() => goal.save(form));
+  const remove = useAction(() => goal.remove());
+  const hasGoal = goal.data?.percent != null || goal.data?.amount != null;
+
+  return (
+    <Card title="Meta de guardar por mês">
+      <p className={ui.muted}>
+        Quanto você quer guardar todo mês. A tela inicial mostra a meta e quanto sobra para gastar; a projeção não muda.
+      </p>
+      <NoticeBar notice={goal.notice} onClose={goal.clear} />
+      <Segmented
+        value={form.kind}
+        options={[
+          { value: 'percent', label: '% do que sobra' },
+          { value: 'amount', label: 'Valor fixo' },
+        ]}
+        onChange={(kind) => setForm({ kind, value: '' })}
+      />
+      {form.kind === 'percent' ? (
+        <Field
+          label="Porcentagem do que sobra no mês"
+          placeholder="50"
+          inputMode="numeric"
+          value={form.value}
+          mask={(v) => digits(v).slice(0, 3)}
+          onChange={(value) => setForm({ ...form, value })}
+          hint="O que sobra = entradas + recebimentos − despesas fixas e variáveis do mês (o crescimento por mês)."
+        />
+      ) : (
+        <Field label="Quanto guardar por mês" prefix="R$" inputMode="numeric" value={form.value} mask={maskMoney} onChange={(value) => setForm({ ...form, value })} />
+      )}
+      <FormError error={save.error ?? remove.error} />
+      <div className="flex flex-wrap gap-2">
+        <Button busy={save.busy} onClick={() => (remove.clearError(), save.run())}>
+          Salvar meta
+        </Button>
+        {hasGoal && (
+          <Button variant="secondary" busy={remove.busy} onClick={() => (save.clearError(), remove.run())}>
+            Remover meta
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }
